@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="http://xmlns.jcp.org/jsf/html"
+      xmlns:p="http://primefaces.org/ui"
+      xmlns:f="http://xmlns.jcp.org/jsf/core">
+
+    <h:head>
+        <h:outputStylesheet name="css/default.css" />
+        <h:outputScript name="js/locationLogMap.js" library="js"/>
+        <!-- JYFR: Para que funcionen los mapas de Google Maps. Además, no puede estar encerrado en ningún panel -->
+        <script src="https://maps.google.com/maps/api/js" type="text/javascript" ></script>
+        <script>
+            //<![CDATA[
+            function handleComplete(xhr, status, args) {
+                if (args !== undefined) {
+                    var map = PF('gmap').getMap();
+
+                    for (var i in map.markers) {
+                        var marker = map.markers[i];
+
+                        var icon = "icon_" + marker["id"];
+                        if (args.hasOwnProperty(icon)) {
+                            marker.setIcon(args[icon]);
+                        }
+                        var title = "title_" + marker["id"];
+                        if (args.hasOwnProperty(title)) {
+                            marker.setTitle(args[title]);
+                        }
+                        var latLng = "latLng_" + marker["id"];
+                        if (args.hasOwnProperty(latLng)) {
+                            var comp = args[latLng].split(",");
+                            if (comp.length === 2) {
+                                marker.setPosition(new google.maps.LatLng(comp[0], comp[1]));
+                            }
+                        }
+                    }
+                }
+            }
+            // ]]>
+        </script>
+    </h:head>
+    <h:body>
+        <h:form id="SimulatorMapForm">
+            <p:panel id="gmapUpdater" style="display: none">
+                <p:poll interval="2" listener="#{simulatorController.getCurrentLatLng()}" oncomplete="handleComplete(xhr, status, args)" update="simulatorMessage, simulateButton, generateButton, gmapUpdater" rendered="#{simulatorController.simulating || simulatorController.finishing}"/>
+            </p:panel>
+            <p:layout>
+                <p:layoutUnit position="west" resizable="false" size="300" header="#{bundle.TrackConditions}">
+                    <h:panelGrid columns="1" style="padding: 5px;">
+                        <h:outputText id="outputDistanceFromSevilleCenter" value="#{bundle.DistanceFromSevilleCenter} #{simulatorController.distanceFromSevilleCenter} Km" />
+                        <h:inputHidden id="distanceFromSevilleCenter" value="#{simulatorController.distanceFromSevilleCenter}"/>
+                        <p:slider for="distanceFromSevilleCenter" minValue="0" maxValue="100" display="outputDistanceFromSevilleCenter" displayTemplate="#{bundle.DistanceFromSevilleCenter} {value} Km"/>
+
+                        <h:outputText id="outputTrackDistance" value="#{bundle.TrackDistance} #{simulatorController.distance} Km" />
+                        <h:inputHidden id="distance" value="#{simulatorController.distance}"/>
+                        <p:slider for="distance" minValue="1" maxValue="100" display="outputTrackDistance" displayTemplate="#{bundle.TrackDistance} {value} Km"/>
+
+                        <h:outputText id="outputTracksAmount" value="#{bundle.TracksAmount} #{simulatorController.tracksAmount}" />
+                        <h:inputHidden id="tracksAmount" value="#{simulatorController.tracksAmount}"/>
+                        <p:slider for="tracksAmount" minValue="1" maxValue="100" display="outputTracksAmount" displayTemplate="#{bundle.TracksAmount} {value}"/>
+
+                        <p:outputLabel value="#{bundle.SimulationMethod}" for="simulationMethod" />
+                        <h:selectOneRadio id="simulationMethod" value="#{simulatorController.simulationMethod}" layout="pageDirection">
+                            <f:selectItem itemValue="0" itemLabel="Google Maps"/>
+                            <f:selectItem itemValue="1" itemLabel="OpenStreetMap"/>
+                        </h:selectOneRadio>
+                        <p:selectBooleanCheckbox value="#{simulatorController.createSimulatedUser}" itemLabel="#{bundle.CreateSimulatedUser}" style="padding-top: 2px;"/>
+                        <p:commandButton id="generateButton" value="#{bundle.GenerateTracks}" action="#{simulatorController.generateSimulatedTracks()}" update="gmap, trackInfoPanel" disabled="#{simulatorController.simulating}"/>
+                        <p:separator />
+
+                        <h:outputText id="outputSimulatedSmartDrivers" value="#{bundle.SimulatedSmartDriversPerTrack} #{simulatorController.simulatedSmartDrivers}" />
+                        <h:inputHidden id="simulatedSmartDrivers" value="#{simulatorController.simulatedSmartDrivers}"/>
+                        <p:slider for="simulatedSmartDrivers" minValue="1" maxValue="100" display="outputSimulatedSmartDrivers" displayTemplate="#{bundle.SimulatedSmartDriversPerTrack} {value}"/>
+
+                        <h:outputText id="outputSimulatedSpeed" value="#{bundle.SimulationSpeed}" />
+                        <p:selectOneButton value="#{simulatorController.simulatedSpeed}">
+                            <f:selectItem itemLabel="1x" itemValue="1000" />
+                            <f:selectItem itemLabel="10x" itemValue="100" />
+                            <f:selectItem itemLabel="100x" itemValue="10" />
+                            <f:selectItem itemLabel="1000x" itemValue="1" />
+                        </p:selectOneButton>
+                        <p:commandButton id="simulateButton" value="#{simulatorController.simulating ? bundle.StopSimulation : bundle.StartSimulation}" action="#{simulatorController.realTimeSimulate()}" update="gmapUpdater, gmap, generateButton" style="padding-top: 5px;"/>
+                    </h:panelGrid>
+                </p:layoutUnit>
+
+                <p:layoutUnit position="center">
+                    <!-- FIXME: Poner 'fitBounds' cuando se corrija el 'bug' que tiene Primefaces con Google Maps -->
+                    <p:gmap id="gmap" widgetVar="gmap" center="#{simulatorController.markerLatitudeLongitude}" zoom="10" type="ROADMAP" model="#{simulatorController.simulatedMapModel}" style="height:400px" fitBounds="true">
+                        <p:ajax event="overlaySelect" listener="#{simulatorController.onMarkerSelect}"/>
+                        <p:gmapInfoWindow id="infoWindow">
+                            <p:outputPanel style="text-align: center; display: block; margin: auto">
+                                <h:outputText value="#{simulatorController.marker.title}" />
+                            </p:outputPanel>
+                        </p:gmapInfoWindow>
+                    </p:gmap>
+                    <p:outputPanel id="simulatorMessage" rendered="#{simulatorController.simulating}">
+                        <h3>#{simulatorController.simulationFinishedMessage}</h3>
+                    </p:outputPanel>
+
+                    <p:panel id="trackInfoPanel" header="#{bundle.TrackInfo}" style="margin: 10px;">
+                        <p:dataTable id="datalist" value="#{simulatorController.trackInfoList}" var="item"
+                                     paginator="false"
+                                     emptyMessage="#{bundle.NoRows}"
+                                     rowKey="#{item.summary.distance}"
+                                     resizableColumns="true"
+                                     sortBy="#{item.summary.distance}"
+                                     sortOrder="ascending"
+                                     scrollable="true"
+                                     rows="100"
+                                     styleClass="align-top-rows">
+
+                            <!-- Para poner 'tooltips' en las cabeceras de las columnas de la tabla -->
+                            <p:tooltip/>
+
+                            <p:column sortBy="#{item.summary.distance}" style="width:80px;">
+                                <f:facet name="header">
+                                    <h:outputText value="#{bundle.Distance}" title="#{bundle.Distance}" escape="false" style="white-space:pre-line;"/>
+                                </f:facet>
+                                <h:outputText value="#{item.summary.formattedDistance}" style="float:right"/>
+                            </p:column>
+                            <p:column sortBy="#{item.summary.duration}" style="width:80px;">
+                                <f:facet name="header">
+                                    <h:outputText value="#{bundle.Time}" title="#{bundle.Time}" escape="false" style="white-space:pre-line;"/>
+                                </f:facet>
+                                <h:outputText value="#{item.summary.formattedTime}" style="float:right"/>
+                            </p:column>
+                            <p:column sortBy="#{item.totalLocations}" style="width:50px;">
+                                <f:facet name="header">
+                                    <h:outputText value="NºLoc" title="#{bundle.TotalLocations}" escape="false" style="white-space:pre-line;"/>
+                                </f:facet>
+                                <h:outputText value="#{item.totalLocations}" style="float:right"/>
+                            </p:column>
+                            <p:column sortBy="#{item.averageLocationsDistance}" style="width:50px;">
+                                <f:facet name="header">
+                                    <h:outputText value="AvgD" title="#{bundle.AverageLocationsDistance}" escape="false" style="white-space:pre-line;"/>
+                                </f:facet>
+                                <h:outputText value="#{item.averageLocationsDistance}" style="float:right">
+                                    <f:convertNumber pattern="#0.00m"/>
+                                </h:outputText>
+                            </p:column>
+                            <p:column sortBy="#{item.maximumLocationsDistance}" style="width:50px;">
+                                <f:facet name="header">
+                                    <h:outputText value="MaxD" title="#{bundle.MaximumLocationsDistance}" escape="false" style="white-space:pre-line;"/>
+                                </f:facet>
+                                <h:outputText value="#{item.maximumLocationsDistance}" style="float:right">
+                                    <f:convertNumber pattern="#0.00m"/>
+                                </h:outputText>
+                            </p:column>
+                            <p:column sortBy="#{item.summary.startAddress}">
+                                <f:facet name="header">
+                                    <h:outputText value="#{bundle.StartAddress}" title="#{bundle.StartAddress}" escape="false" style="white-space:pre-line;"/>
+                                </f:facet>
+                                <h:outputText value="#{item.summary.startAddress}"/>
+                            </p:column>
+                            <p:column sortBy="#{item.summary.endAddress}">
+                                <f:facet name="header">
+                                    <h:outputText value="#{bundle.EndAddress}" title="#{bundle.EndAddress}" escape="false" style="white-space:pre-line;"/>
+                                </f:facet>
+                                <h:outputText value="#{item.summary.endAddress}"/>
+                            </p:column>
+                        </p:dataTable>
+                    </p:panel>
+                </p:layoutUnit>
+            </p:layout>
+        </h:form>
+    </h:body>
+</html>

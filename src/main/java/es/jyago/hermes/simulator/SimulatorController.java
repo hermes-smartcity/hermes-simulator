@@ -12,11 +12,9 @@ import es.jyago.hermes.google.directions.Location;
 import es.jyago.hermes.google.directions.PolylineDecoder;
 import es.jyago.hermes.google.directions.Route;
 import es.jyago.hermes.location.LocationLog;
-import es.jyago.hermes.location.LocationLogFacade;
 import es.jyago.hermes.openStreetMap.GeomWay;
 import es.jyago.hermes.openStreetMap.GeomWaySteps;
 import es.jyago.hermes.person.Person;
-import es.jyago.hermes.person.PersonFacade;
 import es.jyago.hermes.smartDriver.DataSection;
 import es.jyago.hermes.smartDriver.RoadSection;
 import es.jyago.hermes.util.Constants;
@@ -95,7 +93,6 @@ public class SimulatorController implements Serializable {
     private int distance;
     private int distanceFromSevilleCenter;
     private int tracksAmount;
-    private boolean createSimulatedUser;
     private List<TrackInfo> trackInfoList;
     private MapModel simulatedMapModel;
     private Track_Simulation_Method simulationMethod;
@@ -106,12 +103,6 @@ public class SimulatorController implements Serializable {
     private String url;
     private int finishAssertTime;
     private boolean previouslySimulating;
-
-    @Inject
-    private PersonFacade personFacade;
-
-    @Inject
-    private LocationLogFacade locationLogFacade;
 
     @Inject
     @MessageBundle
@@ -126,7 +117,6 @@ public class SimulatorController implements Serializable {
         distance = 10;
         tracksAmount = 1;
         simulatedSmartDrivers = 1;
-        createSimulatedUser = false;
         simulationMethod = Track_Simulation_Method.GOOGLE;
         marker = new Marker(new LatLng(SEVILLE.getLat(), SEVILLE.getLng()));
         marker.setDraggable(false);
@@ -252,12 +242,6 @@ public class SimulatorController implements Serializable {
                 ll.setPerson(person);
                 ll.setFilename(person.getFullName());
 
-                if (createSimulatedUser) {
-                    // Pero sólo lo grabaremos en la B.D. si lo indica el usuario.
-                    personFacade.create(person);
-                    locationLogFacade.create(ll);
-                }
-
                 locationLogList.add(ll);
                 trackInfoList.add(trackInfo);
             }
@@ -275,8 +259,6 @@ public class SimulatorController implements Serializable {
         Person person = new Person();
         String name = "Sim_" + currentTime;
         person.setFullName(name);
-        person.setUsername(name);
-        person.setPassword("hermes");
         person.setEmail(name + "@sim.com");
 
         return person;
@@ -570,14 +552,6 @@ public class SimulatorController implements Serializable {
 
     public List<TrackInfo> getTrackInfoList() {
         return trackInfoList;
-    }
-
-    public boolean isCreateSimulatedUser() {
-        return createSimulatedUser;
-    }
-
-    public void setCreateSimulatedUser(boolean createSimulatedUser) {
-        this.createSimulatedUser = createSimulatedUser;
     }
 
     public int getSimulationMethod() {

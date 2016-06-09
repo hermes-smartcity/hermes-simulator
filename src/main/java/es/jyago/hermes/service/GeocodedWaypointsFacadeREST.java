@@ -11,10 +11,8 @@ import es.jyago.hermes.google.directions.PolylineDecoder;
 import es.jyago.hermes.google.directions.Route;
 import es.jyago.hermes.google.directions.Location;
 import es.jyago.hermes.location.LocationLog;
-import es.jyago.hermes.location.LocationLogFacade;
 import es.jyago.hermes.location.detail.LocationLogDetail;
 import es.jyago.hermes.person.Person;
-import es.jyago.hermes.person.PersonFacade;
 import es.jyago.hermes.util.Util;
 import java.util.ArrayList;
 import java.util.Date;
@@ -23,7 +21,6 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.ejb.Stateless;
-import javax.inject.Inject;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -42,12 +39,6 @@ import org.joda.time.LocalTime;
 public class GeocodedWaypointsFacadeREST {
 
     private static final Logger LOG = Logger.getLogger(GeocodedWaypointsFacadeREST.class.getName());
-
-    @Inject
-    private PersonFacade personFacade;
-
-    @Inject
-    private LocationLogFacade locationLogFacade;
 
     public GeocodedWaypointsFacadeREST() {
     }
@@ -88,8 +79,6 @@ public class GeocodedWaypointsFacadeREST {
                 Date currentTime = new Date();
                 String name = "Sim_" + currentTime.getTime();
                 person.setFullName(name);
-                person.setUsername(name);
-                person.setPassword("hermes");
 
                 LocationLog ll = new LocationLog();
                 ll.setFilename(name);
@@ -142,10 +131,6 @@ public class GeocodedWaypointsFacadeREST {
                             ll.setLocationLogDetailList(locationLogDetailList);
                         }
                     }
-
-                    personFacade.create(person);
-                    locationLogFacade.create(ll);
-
                 }
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, "create() - Error al procesar el trayectos recibido", ex);

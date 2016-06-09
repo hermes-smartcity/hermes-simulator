@@ -65,7 +65,6 @@
                             <f:selectItem itemValue="0" itemLabel="Google Maps"/>
                             <f:selectItem itemValue="1" itemLabel="OpenStreetMap"/>
                         </h:selectOneRadio>
-                        <p:selectBooleanCheckbox value="#{simulatorController.createSimulatedUser}" itemLabel="#{bundle.CreateSimulatedUser}" style="padding-top: 2px;"/>
                         <p:commandButton id="generateButton" value="#{bundle.GenerateTracks}" action="#{simulatorController.generateSimulatedTracks()}" update="gmap, trackInfoPanel" disabled="#{simulatorController.simulating}"/>
                         <p:separator />
 

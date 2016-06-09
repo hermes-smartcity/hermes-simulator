@@ -8,72 +8,23 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.ResourceBundle;
-import javax.persistence.Basic;
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.NamedQueries;
-import javax.persistence.NamedQuery;
-import javax.persistence.OneToMany;
-import javax.persistence.OrderBy;
-import javax.persistence.PostLoad;
-import javax.persistence.Table;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
-import javax.persistence.Transient;
-import javax.validation.constraints.NotNull;
-import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlTransient;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 
-@Entity
-@Table(name = "location_log")
-@XmlRootElement
-@NamedQueries({
-    @NamedQuery(name = "LocationLog.findAll", query = "SELECT l FROM LocationLog l"),
-    @NamedQuery(name = "LocationLog.findByLocationLogId", query = "SELECT l FROM LocationLog l WHERE l.locationLogId = :locationLogId"),
-    @NamedQuery(name = "LocationLog.findByDateLog", query = "SELECT l FROM LocationLog l WHERE l.dateLog = :dateLog"),
-    @NamedQuery(name = "LocationLog.findByPerson", query = "SELECT l FROM LocationLog l WHERE l.person.personId = :personId")})
 public class LocationLog implements Serializable {
 
     private static final long serialVersionUID = 1L;
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Basic(optional = false)
-    @Column(name = "location_log_id")
     private Integer locationLogId;
-    @Basic(optional = false)
-    @NotNull
-    @Column(name = "date_log")
-    @Temporal(TemporalType.DATE)
     private Date dateLog;
-    @JoinColumn(name = "person_id", referencedColumnName = "person_id")
-    @ManyToOne(optional = false)
     private Person person;
-    @OneToMany(cascade = CascadeType.ALL, mappedBy = "locationLog", orphanRemoval = true)
-    @OrderBy("timeLog ASC")
     private List<LocationLogDetail> locationLogDetailList;
-    @Basic(optional = false)
-    @NotNull
-    @Column(name = "filename")
     private String filename;
-
-    @Transient
     private LocationLogDetail maximumSpeedLocation;
-    @Transient
     private LocationLogDetail minimumHeartRateLocation;
-    @Transient
     private LocationLogDetail maximumHeartRateLocation;
-
-    @Transient
     private double avgHeartRate;
 
     public LocationLog() {
@@ -81,13 +32,6 @@ public class LocationLog implements Serializable {
         maximumSpeedLocation = new LocationLogDetail();
         maximumHeartRateLocation = new LocationLogDetail();
         minimumHeartRateLocation = new LocationLogDetail();
-    }
-
-    // JYFR: Método que será invocado automáticamente tras cargar los datos de la base de datos y de ser inyectados en los atributos correspondientes.
-    @PostLoad
-    private void init() {
-        // Calculamos el máximo, mínimo y media aritmética.
-        findMaxMinAvgValues();
     }
 
     public Integer getLocationLogId() {

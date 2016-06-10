@@ -140,13 +140,21 @@
         </plugins>
     </build>
     
-    <!-- JYFR: Repositorio de PrimeFaces -->
     <repositories>
+        <!-- JYFR: Repositorio de PrimeFaces -->
         <repository>
             <url>http://repository.primefaces.org/</url>
             <id>PrimeFaces-maven-lib</id>
             <layout>default</layout>
             <name>Repository for library PrimeFaces-maven-lib</name>
+        </repository>
+        
+        <!-- JYFR: Repositorio especial para la librería 'Ztreamy' mientras no disponga de uno propio -->
+        <repository>
+            <url>file://${basedir}/my-repo</url>
+            <id>my-repo</id>
+            <layout>default</layout>
+            <name>Repository for library Ztreamy</name>
         </repository>
     </repositories>
 

@@ -1,15 +1,16 @@
 package es.jyago.hermes.location.detail;
 
 import es.jyago.hermes.location.LocationLog;
+import es.jyago.hermes.util.Constants;
 import java.io.Serializable;
 import java.util.Date;
+import java.util.ResourceBundle;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 
 public class LocationLogDetail implements Serializable {
 
     private static final long serialVersionUID = 1L;
-
     private Integer locationLogDetailId;
     private Date timeLog;
     private double latitude;
@@ -18,6 +19,7 @@ public class LocationLogDetail implements Serializable {
     private int heartRate;
     private int rrTime;
     private LocationLog locationLog;
+    private int secondsToBeHere;
 
     public LocationLogDetail() {
         this.timeLog = null;
@@ -26,19 +28,19 @@ public class LocationLogDetail implements Serializable {
         this.speed = 0.0d;
         this.heartRate = 0;
         this.rrTime = 0;
+        this.secondsToBeHere = 0;
     }
 
     public LocationLogDetail(Integer locationLogDetailId) {
         this.locationLogDetailId = locationLogDetailId;
     }
 
-    public LocationLogDetail(Integer locationLogDetailId, Date timeLog, double latitude, double longitude, double speed, int heartRate) {
-        this.locationLogDetailId = locationLogDetailId;
-        this.timeLog = timeLog;
+    public LocationLogDetail(double latitude, double longitude, double speed, int heartRate, int secondsToBeHere) {
         this.latitude = latitude;
         this.longitude = longitude;
         this.speed = speed;
         this.heartRate = heartRate;
+        this.secondsToBeHere = secondsToBeHere;
     }
 
     public Integer getLocationLogDetailId() {
@@ -105,6 +107,14 @@ public class LocationLogDetail implements Serializable {
         this.rrTime = rrTime;
     }
 
+    public int getSecondsToBeHere() {
+        return secondsToBeHere;
+    }
+
+    public void setSecondsToBeHere(int secondsToBeHere) {
+        this.secondsToBeHere = secondsToBeHere;
+    }
+
     @Override
     public int hashCode() {
         return new HashCodeBuilder(19, 29).
@@ -142,4 +152,15 @@ public class LocationLogDetail implements Serializable {
         return sb.toString();
     }
 
+    public String getMarkerTitle() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(ResourceBundle.getBundle("/Bundle").getString("Time")).append(": ").append(Constants.dfTime.format(getTimeLog()));
+        sb.append(" ");
+        sb.append(ResourceBundle.getBundle("/Bundle").getString("HeartRate")).append(": ").append(Integer.toString(getHeartRate()));
+        sb.append(" ");
+        sb.append(ResourceBundle.getBundle("/Bundle").getString("Speed")).append(": ").append(Constants.df2Decimals.format(getSpeed())).append(" Km/h");
+        sb.append(" (").append(getLatitude()).append(", ").append(getLongitude()).append(")");
+
+        return sb.toString();
+    }
 }

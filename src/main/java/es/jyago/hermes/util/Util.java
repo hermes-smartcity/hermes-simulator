@@ -50,4 +50,27 @@ public class Util {
 
         return dist;
     }
+
+    /**
+     * Método para indicar la orientación que sigue, dado un punto de origen y otro de destino.
+     * La orientación es respecto a los ejes cardinales, siendo:
+     *      Norte....:   0 grados (ó 360 grados)
+     *      Este.....:  90 grados
+     *      Sur......: 180 grados
+     *      Oeste....: 270 grados
+     * @param lat1 Latitud del punto de origen.
+     * @param lng1 Longitud del punto de origen.
+     * @param lat2 Latitud del punto de destino.
+     * @param lng2 Longitud del punto de destino.
+     * @return Grados que definen la orientación, respecto a los ejes cardinales.
+     */
+    public static double bearing(double lat1, double lng1, double lat2, double lng2) {
+        double latitude1 = Math.toRadians(lat1);
+        double latitude2 = Math.toRadians(lat2);
+        double longDiff = Math.toRadians(lng2 - lng1);
+        double y = Math.sin(longDiff) * Math.cos(latitude2);
+        double x = Math.cos(latitude1) * Math.sin(latitude2) - Math.sin(latitude1) * Math.cos(latitude2) * Math.cos(longDiff);
+
+        return (Math.toDegrees(Math.atan2(y, x)) + 360) % 360;
+    }
 }

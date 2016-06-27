@@ -43,9 +43,9 @@
     <h:body>
         <h:form id="SimulatorMapForm">
             <p:panel id="gmapUpdater" style="display: none">
-                <p:poll interval="2" listener="#{simulatorController.getCurrentLatLng()}" oncomplete="handleComplete(xhr, status, args)" update="simulatorMessage, simulateButton, generateButton, gmapUpdater" rendered="#{simulatorController.simulating || simulatorController.finishing}"/>
+                <p:poll interval="2" listener="#{simulatorController.getCurrentLatLng()}" oncomplete="handleComplete(xhr, status, args)" update="simulateButton, generateButton, gmapUpdater" rendered="#{simulatorController.simulating || simulatorController.finishing}"/>
             </p:panel>
-            <p:layout>
+            <p:layout fullPage="true">
                 <p:layoutUnit position="west" resizable="false" size="300" header="#{bundle.TrackConditions}">
                     <h:panelGrid columns="1" style="padding: 5px;">
                         <h:outputText id="outputDistanceFromSevilleCenter" value="#{bundle.DistanceFromSevilleCenter} #{simulatorController.distanceFromSevilleCenter} Km" />
@@ -60,32 +60,20 @@
                         <h:inputHidden id="tracksAmount" value="#{simulatorController.tracksAmount}"/>
                         <p:slider for="tracksAmount" minValue="1" maxValue="100" display="outputTracksAmount" displayTemplate="#{bundle.TracksAmount} {value}"/>
 
-                        <p:outputLabel value="#{bundle.SimulationMethod}" for="simulationMethod" />
-                        <h:selectOneRadio id="simulationMethod" value="#{simulatorController.simulationMethod}" layout="pageDirection">
-                            <f:selectItem itemValue="0" itemLabel="Google Maps"/>
-                            <f:selectItem itemValue="1" itemLabel="OpenStreetMap"/>
-                        </h:selectOneRadio>
-                        <p:commandButton id="generateButton" value="#{bundle.GenerateTracks}" action="#{simulatorController.generateSimulatedTracks()}" update="gmap, trackInfoPanel" disabled="#{simulatorController.simulating}"/>
+                        <p:commandButton id="generateButton" value="#{bundle.GenerateTracks}" action="#{simulatorController.generateSimulatedTracks()}" update="gmap" disabled="#{simulatorController.simulating}"/>
                         <p:separator />
 
                         <h:outputText id="outputSimulatedSmartDrivers" value="#{bundle.SimulatedSmartDriversPerTrack} #{simulatorController.simulatedSmartDrivers}" />
                         <h:inputHidden id="simulatedSmartDrivers" value="#{simulatorController.simulatedSmartDrivers}"/>
                         <p:slider for="simulatedSmartDrivers" minValue="1" maxValue="100" display="outputSimulatedSmartDrivers" displayTemplate="#{bundle.SimulatedSmartDriversPerTrack} {value}"/>
 
-                        <h:outputText id="outputSimulatedSpeed" value="#{bundle.SimulationSpeed}" />
-                        <p:selectOneButton value="#{simulatorController.simulatedSpeed}">
-                            <f:selectItem itemLabel="1x" itemValue="1000" />
-                            <f:selectItem itemLabel="10x" itemValue="100" />
-                            <f:selectItem itemLabel="100x" itemValue="10" />
-                            <f:selectItem itemLabel="1000x" itemValue="1" />
-                        </p:selectOneButton>
                         <p:commandButton id="simulateButton" value="#{simulatorController.simulating ? bundle.StopSimulation : bundle.StartSimulation}" action="#{simulatorController.realTimeSimulate()}" update="gmapUpdater, gmap, generateButton" style="padding-top: 5px;"/>
                     </h:panelGrid>
                 </p:layoutUnit>
 
                 <p:layoutUnit position="center">
                     <!-- FIXME: Poner 'fitBounds' cuando se corrija el 'bug' que tiene Primefaces con Google Maps -->
-                    <p:gmap id="gmap" widgetVar="gmap" center="#{simulatorController.markerLatitudeLongitude}" zoom="10" type="ROADMAP" model="#{simulatorController.simulatedMapModel}" style="height:400px" fitBounds="true">
+                    <p:gmap id="gmap" widgetVar="gmap" center="#{simulatorController.markerLatitudeLongitude}" zoom="10" type="ROADMAP" model="#{simulatorController.simulatedMapModel}" style="height:100%" fitBounds="true">
                         <p:ajax event="overlaySelect" listener="#{simulatorController.onMarkerSelect}"/>
                         <p:gmapInfoWindow id="infoWindow">
                             <p:outputPanel style="text-align: center; display: block; margin: auto">
@@ -93,73 +81,7 @@
                             </p:outputPanel>
                         </p:gmapInfoWindow>
                     </p:gmap>
-                    <p:outputPanel id="simulatorMessage" rendered="#{simulatorController.simulating}">
-                        <h3>#{simulatorController.simulationFinishedMessage}</h3>
-                    </p:outputPanel>
 
-                    <p:panel id="trackInfoPanel" header="#{bundle.TrackInfo}" style="margin: 10px;">
-                        <p:dataTable id="datalist" value="#{simulatorController.trackInfoList}" var="item"
-                                     paginator="false"
-                                     emptyMessage="#{bundle.NoRows}"
-                                     rowKey="#{item.summary.distance}"
-                                     resizableColumns="true"
-                                     sortBy="#{item.summary.distance}"
-                                     sortOrder="ascending"
-                                     scrollable="true"
-                                     rows="100"
-                                     styleClass="align-top-rows">
-
-                            <!-- Para poner 'tooltips' en las cabeceras de las columnas de la tabla -->
-                            <p:tooltip/>
-
-                            <p:column sortBy="#{item.summary.distance}" style="width:80px;">
-                                <f:facet name="header">
-                                    <h:outputText value="#{bundle.Distance}" title="#{bundle.Distance}" escape="false" style="white-space:pre-line;"/>
-                                </f:facet>
-                                <h:outputText value="#{item.summary.formattedDistance}" style="float:right"/>
-                            </p:column>
-                            <p:column sortBy="#{item.summary.duration}" style="width:80px;">
-                                <f:facet name="header">
-                                    <h:outputText value="#{bundle.Time}" title="#{bundle.Time}" escape="false" style="white-space:pre-line;"/>
-                                </f:facet>
-                                <h:outputText value="#{item.summary.formattedTime}" style="float:right"/>
-                            </p:column>
-                            <p:column sortBy="#{item.totalLocations}" style="width:50px;">
-                                <f:facet name="header">
-                                    <h:outputText value="NºLoc" title="#{bundle.TotalLocations}" escape="false" style="white-space:pre-line;"/>
-                                </f:facet>
-                                <h:outputText value="#{item.totalLocations}" style="float:right"/>
-                            </p:column>
-                            <p:column sortBy="#{item.averageLocationsDistance}" style="width:50px;">
-                                <f:facet name="header">
-                                    <h:outputText value="AvgD" title="#{bundle.AverageLocationsDistance}" escape="false" style="white-space:pre-line;"/>
-                                </f:facet>
-                                <h:outputText value="#{item.averageLocationsDistance}" style="float:right">
-                                    <f:convertNumber pattern="#0.00m"/>
-                                </h:outputText>
-                            </p:column>
-                            <p:column sortBy="#{item.maximumLocationsDistance}" style="width:50px;">
-                                <f:facet name="header">
-                                    <h:outputText value="MaxD" title="#{bundle.MaximumLocationsDistance}" escape="false" style="white-space:pre-line;"/>
-                                </f:facet>
-                                <h:outputText value="#{item.maximumLocationsDistance}" style="float:right">
-                                    <f:convertNumber pattern="#0.00m"/>
-                                </h:outputText>
-                            </p:column>
-                            <p:column sortBy="#{item.summary.startAddress}">
-                                <f:facet name="header">
-                                    <h:outputText value="#{bundle.StartAddress}" title="#{bundle.StartAddress}" escape="false" style="white-space:pre-line;"/>
-                                </f:facet>
-                                <h:outputText value="#{item.summary.startAddress}"/>
-                            </p:column>
-                            <p:column sortBy="#{item.summary.endAddress}">
-                                <f:facet name="header">
-                                    <h:outputText value="#{bundle.EndAddress}" title="#{bundle.EndAddress}" escape="false" style="white-space:pre-line;"/>
-                                </f:facet>
-                                <h:outputText value="#{item.summary.endAddress}"/>
-                            </p:column>
-                        </p:dataTable>
-                    </p:panel>
                 </p:layoutUnit>
             </p:layout>
         </h:form>

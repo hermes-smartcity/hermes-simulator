@@ -13,7 +13,6 @@ import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
-
 public class LocationLog implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -26,6 +25,8 @@ public class LocationLog implements Serializable {
     private LocationLogDetail minimumHeartRateLocation;
     private LocationLogDetail maximumHeartRateLocation;
     private double avgHeartRate;
+    private int duration;
+    private double distance;
 
     public LocationLog() {
         locationLogDetailList = new ArrayList<>();
@@ -91,6 +92,22 @@ public class LocationLog implements Serializable {
         return maximumSpeedLocation;
     }
 
+    public int getDuration() {
+        return duration;
+    }
+
+    public void setDuration(int duration) {
+        this.duration = duration;
+    }
+
+    public double getDistance() {
+        return distance;
+    }
+
+    public void setDistance(double distance) {
+        this.distance = distance;
+    }
+
     private void findMaxMinAvgValues() {
 
         DescriptiveStatistics hearRateStats = new DescriptiveStatistics();
@@ -117,7 +134,7 @@ public class LocationLog implements Serializable {
                     maximumSpeedLocation = detail;
                 }
             }
-            
+
             avgHeartRate = hearRateStats.getMean();
         }
     }

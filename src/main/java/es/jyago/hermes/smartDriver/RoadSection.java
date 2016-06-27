@@ -5,11 +5,13 @@ import java.io.Serializable;
 
 public class RoadSection implements Serializable {
 
-    private Double latitude;
     private transient long time; // Para que no la serialice el GSON.
-    private Double speed;
+    private Double latitude;
     private Double longitude;
+    private Double speed;
     private Integer accuracy;
+    private transient int heartRate; // Para que no la serialice el GSON.
+    private transient int rrTime; // Para que no la serialice el GSON.
     
     public Double getLatitude() {
         return latitude;
@@ -55,4 +57,19 @@ public class RoadSection implements Serializable {
         this.accuracy = accuracy;
     }
 
+    public int getHeartRate() {
+        return heartRate;
+    }
+
+    public void setHeartRate(int heartRate) {
+        this.heartRate = heartRate;
+    }
+
+    public int getRrTime() {
+        return rrTime;
+    }
+
+    public void setRrTime(int rrTime) {
+        this.rrTime = rrTime;
+    }
 }

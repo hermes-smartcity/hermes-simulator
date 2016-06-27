@@ -1,6 +1,5 @@
 package es.jyago.hermes.location;
 
-import es.jyago.hermes.person.Person;
 import java.io.Serializable;
 import java.util.List;
 import java.util.logging.Logger;

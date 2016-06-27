@@ -24,7 +24,7 @@ public class ThreadPoolMonitor implements Runnable {
     @Override
     public void run() {
         while (run) {
-            LOG.log(Level.INFO, String.format("ThreadPoolMonitor [Pool size:%d / Core: %d] Active: %d, Completed: %d, Task: %d, isShutdown: %s, isTerminated: %s",
+            LOG.log(Level.FINE, String.format("ThreadPoolMonitor [Pool size:%d / Core: %d] Active: %d, Completed: %d, Task: %d, isShutdown: %s, isTerminated: %s",
                     this.executor.getPoolSize(),
                     this.executor.getCorePoolSize(),
                     this.executor.getActiveCount(),

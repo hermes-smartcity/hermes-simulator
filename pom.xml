@@ -84,7 +84,7 @@
         <dependency>
             <groupId>ztreamy</groupId>
             <artifactId>ztreamyPublisher</artifactId>
-            <version>0.4.2</version>
+            <version>0.4.2.dev12</version>
             <type>jar</type>
         </dependency>
         

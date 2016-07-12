@@ -6,6 +6,7 @@ import java.io.Serializable;
 public class RoadSection implements Serializable {
 
     private transient long time; // Para que no la serialice el GSON.
+    private String timeStamp;
     private Double latitude;
     private Double longitude;
     private Double speed;
@@ -22,11 +23,12 @@ public class RoadSection implements Serializable {
     }
 
     public String getTimeStamp() {
-        return Constants.dfISO8601.format(time);
+        return timeStamp;
     }
 
     public void setTime(long time) {
         this.time = time;
+        this.timeStamp = Constants.dfISO8601.format(time);
     }
     
     public long getTime() {

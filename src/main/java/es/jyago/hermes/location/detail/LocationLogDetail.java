@@ -35,11 +35,12 @@ public class LocationLogDetail implements Serializable {
         this.locationLogDetailId = locationLogDetailId;
     }
 
-    public LocationLogDetail(double latitude, double longitude, double speed, int heartRate, int secondsToBeHere) {
+    public LocationLogDetail(double latitude, double longitude, double speed, int heartRate, int rrTime, int secondsToBeHere) {
         this.latitude = latitude;
         this.longitude = longitude;
         this.speed = speed;
         this.heartRate = heartRate;
+        this.rrTime = rrTime;
         this.secondsToBeHere = secondsToBeHere;
     }
 

@@ -57,6 +57,8 @@ public class SimulatorController implements Serializable {
     private static final String MARKER_START_ICON_PATH = "resources/img/home.png";
     private static final String MARKER_FINISH_ICON_PATH = "resources/img/finish.png";
 
+    private static final int RR_TIME = 850; // Equivale a una frecuencia cardíaca en reposo media (70 ppm).
+
     // Número de errores contabilizados al enviar las tramas a Ztreamy.
     private static volatile int ztreamyErrors;
     // Número de tramas enviadas a Ztreamy
@@ -79,8 +81,6 @@ public class SimulatorController implements Serializable {
     private static Map<String, Timer> simulationTimers;
     private static int simulatedSmartDrivers;
 
-    private static int finishAssertTime;
-    private static boolean previouslySimulating;
 
     @Inject
     @MessageBundle
@@ -100,7 +100,6 @@ public class SimulatorController implements Serializable {
         ztreamyErrors = 0;
         zTreamySends = 0;
         runningThreads = 0;
-        finishAssertTime = 0;
 
         // Generamos trayectos con los parámetros iniciales.
         generateSimulatedTracks();
@@ -142,14 +141,14 @@ public class SimulatorController implements Serializable {
                     while (jsonTrack == null) {
                         try {
                             ///////////////////
-                            // OPENSTREETMAP //
-                            ///////////////////
+                                // OPENSTREETMAP //
+                                ///////////////////
 
-                            // Las nuevas peticiones a OpenStreetMap tienen más densidad de puntos y se puede definir un factor de modificación de la velocidad de la vía.
-                            // Generaremos factores de alteración de la velocidad de 0.5 a 2.0.
+                                // Las nuevas peticiones a OpenStreetMap tienen más densidad de puntos y se puede definir un factor de modificación de la velocidad de la vía.
+                                // Generaremos factores de alteración de la velocidad de 0.5 a 2.0.
 //                                double speedRandomFactor = 0.5d + (new Random().nextDouble() * 1.5d);
-                            // TODO: (Muchas peticiones) Ver si es la mejor forma o si calculo yo las modificaciones de las velocidades. 
-                            jsonTrack = IOUtils.toString(new URL("http://cronos.lbd.org.es/hermes/api/smartdriver/network/simulate?fromLat=" + o.getLat() + "&fromLng=" + o.getLng() + "&toLat=" + d.getLat() + "&toLng=" + d.getLng() + "&speedFactor=1.0"), "UTF-8");
+                                // TODO: (Muchas peticiones) Ver si es la mejor forma o si calculo yo las modificaciones de las velocidades. 
+                                jsonTrack = IOUtils.toString(new URL("http://cronos.lbd.org.es/hermes/api/smartdriver/network/simulate?fromLat=" + o.getLat() + "&fromLng=" + o.getLng() + "&toLat=" + d.getLat() + "&toLng=" + d.getLng() + "&speedFactor=1.0"), "UTF-8");
                         } catch (IOException ex) {
                             LOG.log(Level.SEVERE, "generateSimulatedTracks() - OPENSTREETMAP - Error I/O: {0}", ex.getMessage());
                             // Generamos nuevos puntos aleatorios hasta que sean aceptados.
@@ -181,14 +180,15 @@ public class SimulatorController implements Serializable {
                 try {
                     String json = (String) future.get();
 
-                    ///////////////////
-                    // OPENSTREETMAP //
-                    ///////////////////
-                    // Procesamos el JSON obtenido de OpenStreetMap con las localizaciones y las velocidades de SmartDriver.
-                    Type listType = new TypeToken<ArrayList<PositionSimulatedSpeed>>() {
-                    }.getType();
-                    List<PositionSimulatedSpeed> pssList = new Gson().fromJson(json, listType);
-                    createTrackOpenStreetMaps(pssList, ll);
+///////////////////
+                        // OPENSTREETMAP //
+                        ///////////////////
+
+                        // Procesamos el JSON obtenido de OpenStreetMap con las localizaciones y las velocidades de SmartDriver.
+                        Type listType = new TypeToken<ArrayList<PositionSimulatedSpeed>>() {
+                        }.getType();
+                        List<PositionSimulatedSpeed> pssList = new Gson().fromJson(json, listType);
+                        createTrackOpenStreetMaps(pssList, ll);
                 } catch (InterruptedException | ExecutionException | JsonSyntaxException ex) {
                     LOG.log(Level.SEVERE, "Error al decodificar el JSON de la ruta", ex);
                 }
@@ -268,6 +268,8 @@ public class SimulatorController implements Serializable {
                 lld.setLatitude(currentCoordinates.get(1)); // La posición 1 es la latitud.
                 lld.setLongitude(currentCoordinates.get(0)); // La posición 0 es la longitud.
                 lld.setSpeed(pss.getSpeed());
+                lld.setRrTime(RR_TIME);
+                lld.setHeartRate((int) Math.ceil(60.0d / (RR_TIME / 1000.0d)));
 
                 // Si ha variado el límite de velocidad respecto al anterior, añadimos un 'marker' con el límite de velocidad.
                 if (!previous.getSpeed().equals(pss.getSpeed())) {
@@ -406,56 +408,40 @@ public class SimulatorController implements Serializable {
         simulatedSmartDrivers = ssd;
     }
 
-    public boolean isSimulating() {
-        boolean nowSimulating = simulationTimers != null && !simulationTimers.isEmpty();
-        if (previouslySimulating && !nowSimulating) {
-            // Activamos el temporizador para dar un margen de seguridad y garantizar que termina completamente.
-            finishAssertTime = 5;
-        }
-        previouslySimulating = nowSimulating;
-        return nowSimulating;
-    }
-
-    public boolean isFinishing() {
-        boolean finishing = finishAssertTime > 0;
-        if (finishing) {
-            finishAssertTime--;
-        }
-        return finishing;
+    public static boolean isSimulating() {
+        return (simulationTimers != null && !simulationTimers.isEmpty());
     }
 
     public void getCurrentLatLng() {
-        try {
-            if (isSimulating()) {
-                for (Marker m : simulatedMapModel.getMarkers()) {
-                    LOG.log(Level.FINE, "getCurrentLatLng() - Id del marker: {0}", m.getId());
-                    LatLng latLng = m.getLatlng();
-                    RequestContext context = RequestContext.getCurrentInstance();
-                    // Posición.
-                    if (latLng != null) {
-                        context.addCallbackParam("latLng_" + m.getId(), latLng.getLat() + "," + latLng.getLng());
-                    }
-                    // Icono.
-                    String icon = m.getIcon();
-                    if (icon != null) {
-                        context.addCallbackParam("icon_" + m.getId(), icon);
-                    }
-                    // Información.
-                    String title = m.getTitle();
-                    if (title != null) {
-                        context.addCallbackParam("title_" + m.getId(), title);
-                    }
+        if (isSimulating()) {
+            for (Marker m : simulatedMapModel.getMarkers()) {
+                LOG.log(Level.FINE, "getCurrentLatLng() - Id del marker: {0}", m.getId());
+                LatLng latLng = m.getLatlng();
+                RequestContext context = RequestContext.getCurrentInstance();
+                // Posición.
+                if (latLng != null) {
+                    context.addCallbackParam("latLng_" + m.getId(), latLng.getLat() + "," + latLng.getLng());
                 }
-            } else {
-                resetCarMarkers();
+                // Icono.
+                String icon = m.getIcon();
+                if (icon != null) {
+                    context.addCallbackParam("icon_" + m.getId(), icon);
+                }
+                // Información.
+                String title = m.getTitle();
+                if (title != null) {
+                    context.addCallbackParam("title_" + m.getId(), title);
+                }
             }
-        } catch (Exception ex) {
+        } else {
+            // Ha terminado la simulación.
+            resetCarMarkers();
         }
     }
 
     public static void realTimeSimulate() {
         // Si el temporizador está instanciado, es que hay una simulación en marcha y se quiere parar.
-        if (simulationTimers != null && !simulationTimers.isEmpty()) {
+        if (isSimulating()) {
             if (ztreamyErrors > 0) {
                 LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO: Errores: {0} / Total: {1}. Hilos restantes: {2}", new Object[]{ztreamyErrors, zTreamySends, runningThreads});
             } else {
@@ -474,6 +460,7 @@ public class SimulatorController implements Serializable {
             resetSimulation();
         } else {
             resetSimulation();
+            simulationTimers = new HashMap<>();
             LOG.log(Level.INFO, "realTimeSimulate() - Comienzo de la simulación: {0}", Constants.dfISO8601.format(System.currentTimeMillis()));
             LOG.log(Level.INFO, "realTimeSimulate() - Condiciones: Actualización cada segundo (Tiempo real)");
             runningThreads = simulatedSmartDrivers * locationLogList.size();
@@ -510,9 +497,17 @@ public class SimulatorController implements Serializable {
     }
 
     private static void resetSimulation() {
+        RequestContext context = RequestContext.getCurrentInstance();
+        if (context != null) {
+            if (simulationTimers != null) {
+                context.execute("PF('gmapUpdaterVar').stop();");
+            } else {
+                context.execute("PF('gmapUpdaterVar').start();");
+            }
+        }
 
         resetCarMarkers();
-        simulationTimers = new HashMap<>();
+        simulationTimers = null;
         zTreamySends = 0;
         ztreamyErrors = 0;
     }

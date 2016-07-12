@@ -17,9 +17,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 import java.util.TimerTask;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.ws.rs.core.MediaType;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.primefaces.model.map.LatLng;
@@ -43,8 +46,7 @@ public class SimulatedSmartDriver extends TimerTask {
     private static final double HIGH_DECELERATION_THRESHOLD = -3.5d;
 
     // Parámetros míos de la simulación.
-    private static final int RR_TIME = 750; // Intervalo RR (en milisegundos) que vamos a considerar para un conductor normal.
-    private float stressLoad; // Indicará el nivel de carga de estrés.
+    private int stressLoad; // Indicará el nivel de carga de estrés.
     private boolean relaxing; // Indicará si el usuario está relajándose tras una carga de estrés.
 
     private final Marker trackMarker;
@@ -61,6 +63,8 @@ public class SimulatedSmartDriver extends TimerTask {
     private double cummulativePositiveSpeeds;
     private final List<RoadSection> roadSectionList;
     private int ztreamySecondsCount;
+    private final int minRrTime;
+    private final String sha;
 
     /**
      * Constructor para cada instancia de 'SmartDriver'.
@@ -86,14 +90,17 @@ public class SimulatedSmartDriver extends TimerTask {
         this.cummulativePositiveSpeeds = 0.0d;
         this.ztreamySecondsCount = 0;
         this.stressLoad = 0; // Suponemos que inicialmente no está estresado.
+        int age = ThreadLocalRandom.current().nextInt(18, 65 + 1); // Simularemos conductores de distintas edades (entre 18 y 65 años), para establecer el ritmo cardíaco máximo en la simulación.
+        this.minRrTime = (int) Math.ceil(60000.0d / (220 - age)); // Mínimo R-R, que establecerá el ritmo cardíaco máximo.
         this.publisher = new PublisherHC(new URL(URL), new JSONSerializer());
+        this.sha = new String(Hex.encodeHex(DigestUtils.sha256(System.currentTimeMillis() + ll.getPerson().getEmail())));
         if (variableSpeed) {
             speedRandomFactor = 0.5d + (new Random().nextDouble() * 1.0d);
             localLocationLogDetailList = new ArrayList<>();
             for (LocationLogDetail lld : ll.getLocationLogDetailList()) {
                 // Aplicamos la variación aleatoria de la velocidad.
                 double newSpeed = lld.getSpeed() * speedRandomFactor;
-                localLocationLogDetailList.add(new LocationLogDetail(lld.getLatitude(), lld.getLongitude(), newSpeed, lld.getHeartRate(), (int) (Math.ceil(lld.getSecondsToBeHere() / speedRandomFactor))));
+                localLocationLogDetailList.add(new LocationLogDetail(lld.getLatitude(), lld.getLongitude(), newSpeed, lld.getHeartRate(), lld.getRrTime(), (int) (Math.ceil(lld.getSecondsToBeHere() / speedRandomFactor))));
             }
         }
         // FIXME: Hacer variable el ritmo cardíaco.
@@ -162,15 +169,17 @@ public class SimulatedSmartDriver extends TimerTask {
                     if (stressLoad == 0) {
                         // No hay estrés.
                         trackMarker.setIcon(SimulatorController.MARKER_GREEN_CAR_ICON_PATH);
-                        currentLocationLogDetail.setRrTime(RR_TIME);
                     } else {
                         // Si se está calmando, le subimos el intervalo RR y si se está estresando, le bajamos el intervalo RR.
                         if (relaxing) {
-                            currentLocationLogDetail.setRrTime(previousLocationLogDetail.getRrTime() + 50);
+                            if (stressLoad > 0) {
+                                currentLocationLogDetail.setRrTime(previousLocationLogDetail.getRrTime() - ((previousLocationLogDetail.getRrTime() - currentLocationLogDetail.getRrTime()) / stressLoad));
+                            }
                         } else if (stressLoad < 5) {
-                            currentLocationLogDetail.setRrTime(previousLocationLogDetail.getRrTime() - 50);
+                            currentLocationLogDetail.setRrTime(previousLocationLogDetail.getRrTime() - (minRrTime / stressLoad));
                         } else {
-                            currentLocationLogDetail.setRrTime(previousLocationLogDetail.getRrTime() - 150);
+                            // Establecemos un mínimo R-R en función de la edad del conductor.
+                            currentLocationLogDetail.setRrTime(minRrTime);
                         }
 
                         if (stressLoad < 5) {
@@ -203,9 +212,10 @@ public class SimulatedSmartDriver extends TimerTask {
                     rd.setTime(currentLocationLogDetail.getTimeLog().getTime());
                     rd.setLatitude(currentLocationLogDetail.getLatitude());
                     rd.setLongitude(currentLocationLogDetail.getLongitude());
-                    rd.setSpeed(distance * 3.6 / rd.getTime());
+                    rd.setSpeed(distance * 3.6 / (currentLocationLogDetail.getSecondsToBeHere() - previousLocationLogDetail.getSecondsToBeHere()));
                     rd.setHeartRate(currentLocationLogDetail.getHeartRate());
                     rd.setRrTime(currentLocationLogDetail.getRrTime());
+                    rd.setAccuracy(0);
 
                     roadSectionList.add(rd);
 
@@ -220,7 +230,7 @@ public class SimulatedSmartDriver extends TimerTask {
             }
 
             // Se enviará un resumen cada 500 metros.
-            if (sectionDistance > ZTREAMY_SEND_INTERVAL_METERS) {
+            if (sectionDistance >= ZTREAMY_SEND_INTERVAL_METERS) {
                 sendDataSectionToZtreamy();
             }
 
@@ -284,7 +294,7 @@ public class SimulatedSmartDriver extends TimerTask {
     }
 
     private boolean isTimeToSend() {
-        return ztreamySecondsCount > ZTREAMY_SEND_INTERVAL_SECONDS;
+        return ztreamySecondsCount >= ZTREAMY_SEND_INTERVAL_SECONDS;
     }
 
     private void sendEvery10SecondsIfLocationChanged(LocationLogDetail currentLocationLogDetail) {
@@ -301,7 +311,7 @@ public class SimulatedSmartDriver extends TimerTask {
         try {
             HashMap<String, Object> bodyObject = new HashMap<>();
             bodyObject.put("Location", smartDriverLocation);
-            int result = publisher.publish(new Event(ll.getPerson().getSha(), MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, "Vehicle Location", bodyObject), true);
+            int result = publisher.publish(new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, "Vehicle Location", bodyObject), true);
             SimulatorController.increaseZtreamySends();
 
             if (result == HttpURLConnection.HTTP_OK) {
@@ -319,6 +329,9 @@ public class SimulatedSmartDriver extends TimerTask {
             SimulatorController.increaseZtreamyErrors();
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error I/O: {0} - Trama: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
             // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
+        } catch (Exception ex) {
+            LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error desconocido: {0} - Trama: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
+            // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         }
     }
 
@@ -335,6 +348,7 @@ public class SimulatedSmartDriver extends TimerTask {
         DescriptiveStatistics decelerationStats = new DescriptiveStatistics();
         RoadSection rdPrevious = roadSectionList.get(0);
         speedStats.addValue(rdPrevious.getSpeed());
+        rrStats.addValue(rdPrevious.getRrTime());
         int numHighAccelerations = 0;
         int numHighDecelerations = 0;
 
@@ -342,9 +356,9 @@ public class SimulatedSmartDriver extends TimerTask {
             RoadSection rs = roadSectionList.get(i);
             speedStats.addValue(rs.getSpeed());
 
-            double vDiff = rs.getSpeed() - rdPrevious.getSpeed();
-            double tDiff = (rs.getTime() - rdPrevious.getTime()) / 3600000.0;
-            double acceleration = tDiff > 0.0d ? vDiff / tDiff : 0.0d;
+            double vDiff = (rs.getSpeed() - rdPrevious.getSpeed()) / 3.6d; // Diferencia de velocidades pasadas a m/s.
+            double tDiff = (rs.getTime() - rdPrevious.getTime()) / 1000.0; // Diferencia de tiempos en segundos.
+            double acceleration = tDiff > 0.0d ? vDiff / tDiff : 0.0d; // Aceleración o deceleración en m/s2.
 
             if (acceleration > 0.0d) {
                 accelerationStats.addValue(acceleration);
@@ -363,16 +377,15 @@ public class SimulatedSmartDriver extends TimerTask {
 
             rdPrevious = rs;
         }
-
-        dataSection.setAverageAcceleration(accelerationStats.getN() > 0 ? accelerationStats.getMean() : 0.0d);
-        dataSection.setAverageDeceleration(decelerationStats.getN() > 0 ? decelerationStats.getMean() : 0.0d);
-        dataSection.setAverageHeartRate(heartRateStats.getN() > 0 ? heartRateStats.getMean() : 0.0d);
-        dataSection.setAverageRR(rrStats.getN() > 0 ? rrStats.getMean() : 0.0d);
-        dataSection.setAverageSpeed(speedStats.getN() > 0 ? speedStats.getMean() : 0.0d);
+        dataSection.setAverageAcceleration(accelerationStats.getN() > 0 ? (!Double.isNaN(accelerationStats.getMean()) ? accelerationStats.getMean() : 0.0d) : 0.0d);
+        dataSection.setAverageDeceleration(decelerationStats.getN() > 0 ? (!Double.isNaN(decelerationStats.getMean()) ? decelerationStats.getMean() : 0.0d) : 0.0d);
+        dataSection.setAverageHeartRate(heartRateStats.getN() > 0 ? (!Double.isNaN(heartRateStats.getMean()) ? heartRateStats.getMean() : 0.0d) : 0.0d);
+        dataSection.setAverageRR(rrStats.getN() > 0 ? (!Double.isNaN(rrStats.getMean()) ? rrStats.getMean() : 0.0d) : 0.0d);
+        dataSection.setAverageSpeed(speedStats.getN() > 0 ? (!Double.isNaN(speedStats.getMean()) ? speedStats.getMean() : 0.0d) : 0.0d);
         dataSection.setNumHighAccelerations(numHighAccelerations);
         dataSection.setNumHighDecelerations(numHighDecelerations);
         dataSection.setMaxSpeed(speedStats.getN() > 0 ? speedStats.getMax() : 0.0d);
-        dataSection.setMedianSpeed(speedStats.getN() > 0 ? speedStats.getPercentile(50) : 0.0d);
+        dataSection.setMedianSpeed(speedStats.getN() > 0 ? (!Double.isNaN(speedStats.getPercentile(50)) ? speedStats.getPercentile(50) : 0.0d) : 0.0d);
         dataSection.setMinSpeed(speedStats.getN() > 0 ? speedStats.getMin() : 0.0d);
         dataSection.setPke(sectionDistance > 0.0d ? (cummulativePositiveSpeeds / sectionDistance) : 0.0d);
         List<Integer> rrSectionList = new ArrayList();
@@ -380,9 +393,9 @@ public class SimulatedSmartDriver extends TimerTask {
             rrSectionList.add((int) rr);
         }
         dataSection.setRrSection(rrSectionList);
-        dataSection.setStandardDeviationHeartRate(heartRateStats.getN() > 0 ? heartRateStats.getStandardDeviation() : 0.0d);
-        dataSection.setStandardDeviationRR(rrStats.getN() > 0 ? rrStats.getStandardDeviation() : 0.0d);
-        dataSection.setStandardDeviationSpeed(speedStats.getN() > 0 ? speedStats.getStandardDeviation() : 0.0d);
+        dataSection.setStandardDeviationHeartRate(heartRateStats.getN() > 0 ? (!Double.isNaN(heartRateStats.getStandardDeviation()) ? heartRateStats.getStandardDeviation() : 0.0d) : 0.0d);
+        dataSection.setStandardDeviationRR(rrStats.getN() > 0 ? (!Double.isNaN(rrStats.getStandardDeviation()) ? rrStats.getStandardDeviation() : 0.0d) : 0.0d);
+        dataSection.setStandardDeviationSpeed(speedStats.getN() > 0 ? (!Double.isNaN(speedStats.getStandardDeviation()) ? speedStats.getStandardDeviation() : 0.0d) : 0.0d);
 
         // Asignamos la lista de datos del tramo.
         dataSection.setRoadSection(roadSectionList);
@@ -391,7 +404,7 @@ public class SimulatedSmartDriver extends TimerTask {
             HashMap<String, Object> bodyObject = new HashMap<>();
             bodyObject.put("Data Section", dataSection);
             // Como el envío se produce de manera menos contínua, creamos un 'Publisher' nuevo para hacer el envío, en lugar de intentar reutilizar el de la clase.
-            int result = publisher.publish(new Event(ll.getPerson().getSha(), MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, "Data Section", bodyObject), true);
+            int result = publisher.publish(new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, "Data Section", bodyObject), true);
             SimulatorController.increaseZtreamySends();
 
             if (result == HttpURLConnection.HTTP_OK) {
@@ -405,6 +418,9 @@ public class SimulatedSmartDriver extends TimerTask {
         } catch (IOException ex) {
             SimulatorController.increaseZtreamyErrors();
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error I/O: {0} - Primera trama de la sección: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
+            // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
+        } catch (Exception ex) {
+            LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error desconocido: {0} - Primera trama de la sección: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
             // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         }
 

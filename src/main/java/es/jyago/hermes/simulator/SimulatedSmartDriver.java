@@ -212,7 +212,12 @@ public class SimulatedSmartDriver extends TimerTask {
                     rd.setTime(currentLocationLogDetail.getTimeLog().getTime());
                     rd.setLatitude(currentLocationLogDetail.getLatitude());
                     rd.setLongitude(currentLocationLogDetail.getLongitude());
-                    rd.setSpeed(distance * 3.6 / (currentLocationLogDetail.getSecondsToBeHere() - previousLocationLogDetail.getSecondsToBeHere()));
+                    int tDiff = (currentLocationLogDetail.getSecondsToBeHere() - previousLocationLogDetail.getSecondsToBeHere());
+                    if (tDiff > 0) {
+                        rd.setSpeed(distance * 3.6 / tDiff);
+                    } else {
+                        rd.setSpeed(previousLocationLogDetail.getSpeed());
+                    }
                     rd.setHeartRate(currentLocationLogDetail.getHeartRate());
                     rd.setRrTime(currentLocationLogDetail.getRrTime());
                     rd.setAccuracy(0);

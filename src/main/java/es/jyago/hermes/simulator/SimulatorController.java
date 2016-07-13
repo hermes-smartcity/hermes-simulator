@@ -59,6 +59,9 @@ public class SimulatorController implements Serializable {
 
     private static final int RR_TIME = 850; // Equivale a una frecuencia cardíaca en reposo media (70 ppm).
 
+    // Máximo retardo para iniciar la ruta, en milisegundos:
+    private static final int MAX_INITIAL_DELAY = 60000;
+
     // Número de errores contabilizados al enviar las tramas a Ztreamy.
     private static volatile int ztreamyErrors;
     // Número de tramas enviadas a Ztreamy
@@ -466,6 +469,7 @@ public class SimulatorController implements Serializable {
             runningThreads = simulatedSmartDrivers * locationLogList.size();
             LOG.log(Level.INFO, "realTimeSimulate() - Se crean: {0} hilos de ejecución", runningThreads);
             try {
+                Random rand = new Random();
                 for (int i = 0; i < locationLogList.size(); i++) {
                     LocationLog ll = locationLogList.get(i);
                     LocationLogDetail smartDriverPosition = ll.getLocationLogDetailList().get(0);
@@ -477,7 +481,7 @@ public class SimulatorController implements Serializable {
                         m.setDraggable(false);
 
                         Timer timer = new Timer();
-                        timer.scheduleAtFixedRate(new SimulatedSmartDriver(ll, m, true, true), 100, 1000);
+                        timer.scheduleAtFixedRate(new SimulatedSmartDriver(ll, m, true, true), 100 + rand.nextInt(MAX_INITIAL_DELAY), 1000);
                         simulationTimers.put(i + "_" + j, timer);
 
                         simulatedMapModel.addOverlay(m);

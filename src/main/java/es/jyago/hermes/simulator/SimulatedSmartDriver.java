@@ -52,7 +52,7 @@ public class SimulatedSmartDriver extends TimerTask {
     private final Marker trackMarker;
     private int elapsedSeconds;
     private boolean locationChanged;
-    private final PublisherHC publisher;
+    private PublisherHC publisher;
     private List<LocationLogDetail> localLocationLogDetailList;
     private double speedRandomFactor;
 
@@ -321,13 +321,15 @@ public class SimulatedSmartDriver extends TimerTask {
                 ztreamySecondsCount = 0;
             } else {
                 SimulatorController.increaseZtreamyErrors();
-                LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error SEND: Trama: {0} - Enviada a las: {1} - Errores: {2} / Total: {3}", new Object[]{Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
+                LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error SEND: Result: {0} - Trama: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{result, Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
+                reconnectPublisher();
             }
         } catch (MalformedURLException ex) {
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error en la URL", ex);
         } catch (IOException ex) {
             SimulatorController.increaseZtreamyErrors();
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error I/O: {0} - Trama: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
+            reconnectPublisher();
             // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         } catch (Exception ex) {
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error desconocido: {0} - Trama: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
@@ -443,5 +445,16 @@ public class SimulatedSmartDriver extends TimerTask {
         }
 
         return 0.0d;
+    }
+
+    private void reconnectPublisher() {
+        publisher.close();
+        try {
+            this.publisher = new PublisherHC(new URL(URL), new JSONSerializer());
+        } catch (MalformedURLException e) {
+            // No puede pasar, porque habría pasado también en el constructor
+            // y no lo ha hecho.
+        }
+        LOG.log(Level.SEVERE, "Publisher reconnected");
     }
 }

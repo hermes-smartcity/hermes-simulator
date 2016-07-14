@@ -10,27 +10,27 @@ import javax.faces.context.FacesContext;
 @RequestScoped
 public class MessageProvider {
 
-	private ResourceBundle bundle;
+    private ResourceBundle bundle;
 
-	@Produces
-	@MessageBundle	
-	public ResourceBundle getBundle() {
-		if (bundle == null) {
-			FacesContext context = FacesContext.getCurrentInstance();
-			bundle = context.getApplication().getResourceBundle(context, "bundle");
-		}
-		return bundle;
-	}
+    @Produces
+    @MessageBundle
+    public ResourceBundle getBundle() {
+        if (bundle == null) {
+            FacesContext context = FacesContext.getCurrentInstance();
+            bundle = context.getApplication().getResourceBundle(context, "bundle");
+        }
+        return bundle;
+    }
 
-	public String getValue(String key) {
+    public String getValue(String key) {
 
-		String result;
-		try {
-			result = getBundle().getString(key);
-		} catch (MissingResourceException e) {
-			result = "???" + key + "??? not found";
-		}
-		return result;
-	}
+        String result;
+        try {
+            result = getBundle().getString(key);
+        } catch (MissingResourceException e) {
+            result = "???" + key + "??? not found";
+        }
+        return result;
+    }
 
 }

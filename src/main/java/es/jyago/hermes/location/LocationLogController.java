@@ -6,7 +6,6 @@ import java.util.logging.Logger;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Named;
 
-
 @Named("locationLogController")
 @ApplicationScoped
 public class LocationLogController implements Serializable {

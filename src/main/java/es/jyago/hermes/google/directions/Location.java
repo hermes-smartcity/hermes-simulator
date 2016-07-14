@@ -1,4 +1,3 @@
-
 package es.jyago.hermes.google.directions;
 
 public class Location {
@@ -13,38 +12,34 @@ public class Location {
         this.lat = lat;
         this.lng = lng;
     }
-    
+
     /**
-     * 
-     * @return
-     *     The lat
+     *
+     * @return The lat
      */
     public Double getLat() {
         return lat;
     }
 
     /**
-     * 
-     * @param lat
-     *     The lat
+     *
+     * @param lat The lat
      */
     public void setLat(Double lat) {
         this.lat = lat;
     }
 
     /**
-     * 
-     * @return
-     *     The lng
+     *
+     * @return The lng
      */
     public Double getLng() {
         return lng;
     }
 
     /**
-     * 
-     * @param lng
-     *     The lng
+     *
+     * @param lng The lng
      */
     public void setLng(Double lng) {
         this.lng = lng;

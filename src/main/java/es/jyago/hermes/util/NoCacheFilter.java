@@ -15,7 +15,7 @@ import javax.servlet.http.HttpServletResponse;
 /**
  * Filtro de caché.
  */
-@WebFilter(servletNames={"Faces Servlet"})
+@WebFilter(servletNames = {"Faces Servlet"})
 public class NoCacheFilter implements Filter {
 
     @Override

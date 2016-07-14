@@ -84,7 +84,6 @@ public class SimulatorController implements Serializable {
     private static Map<String, Timer> simulationTimers;
     private static int simulatedSmartDrivers;
 
-
     @Inject
     @MessageBundle
     private ResourceBundle bundle;
@@ -144,14 +143,14 @@ public class SimulatorController implements Serializable {
                     while (jsonTrack == null) {
                         try {
                             ///////////////////
-                                // OPENSTREETMAP //
-                                ///////////////////
+                            // OPENSTREETMAP //
+                            ///////////////////
 
-                                // Las nuevas peticiones a OpenStreetMap tienen más densidad de puntos y se puede definir un factor de modificación de la velocidad de la vía.
-                                // Generaremos factores de alteración de la velocidad de 0.5 a 2.0.
+                            // Las nuevas peticiones a OpenStreetMap tienen más densidad de puntos y se puede definir un factor de modificación de la velocidad de la vía.
+                            // Generaremos factores de alteración de la velocidad de 0.5 a 2.0.
 //                                double speedRandomFactor = 0.5d + (new Random().nextDouble() * 1.5d);
-                                // TODO: (Muchas peticiones) Ver si es la mejor forma o si calculo yo las modificaciones de las velocidades. 
-                                jsonTrack = IOUtils.toString(new URL("http://cronos.lbd.org.es/hermes/api/smartdriver/network/simulate?fromLat=" + o.getLat() + "&fromLng=" + o.getLng() + "&toLat=" + d.getLat() + "&toLng=" + d.getLng() + "&speedFactor=1.0"), "UTF-8");
+                            // TODO: (Muchas peticiones) Ver si es la mejor forma o si calculo yo las modificaciones de las velocidades. 
+                            jsonTrack = IOUtils.toString(new URL("http://cronos.lbd.org.es/hermes/api/smartdriver/network/simulate?fromLat=" + o.getLat() + "&fromLng=" + o.getLng() + "&toLat=" + d.getLat() + "&toLng=" + d.getLng() + "&speedFactor=1.0"), "UTF-8");
                         } catch (IOException ex) {
                             LOG.log(Level.SEVERE, "generateSimulatedTracks() - OPENSTREETMAP - Error I/O: {0}", ex.getMessage());
                             // Generamos nuevos puntos aleatorios hasta que sean aceptados.
@@ -181,17 +180,16 @@ public class SimulatorController implements Serializable {
 
                 // Procesamos el JSON de respuesta, en función de la plataforma a la que le hayamos hecho la petición.
                 try {
-                    String json = (String) future.get();
+                    String json = future.get();
 
-///////////////////
-                        // OPENSTREETMAP //
-                        ///////////////////
-
-                        // Procesamos el JSON obtenido de OpenStreetMap con las localizaciones y las velocidades de SmartDriver.
-                        Type listType = new TypeToken<ArrayList<PositionSimulatedSpeed>>() {
-                        }.getType();
-                        List<PositionSimulatedSpeed> pssList = new Gson().fromJson(json, listType);
-                        createTrackOpenStreetMaps(pssList, ll);
+                    ///////////////////
+                    // OPENSTREETMAP //
+                    ///////////////////
+                    // Procesamos el JSON obtenido de OpenStreetMap con las localizaciones y las velocidades de SmartDriver.
+                    Type listType = new TypeToken<ArrayList<PositionSimulatedSpeed>>() {
+                    }.getType();
+                    List<PositionSimulatedSpeed> pssList = new Gson().fromJson(json, listType);
+                    createTrackOpenStreetMaps(pssList, ll);
                 } catch (InterruptedException | ExecutionException | JsonSyntaxException ex) {
                     LOG.log(Level.SEVERE, "Error al decodificar el JSON de la ruta", ex);
                 }

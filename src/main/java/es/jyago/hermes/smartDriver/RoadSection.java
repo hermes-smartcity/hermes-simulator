@@ -13,7 +13,7 @@ public class RoadSection implements Serializable {
     private Integer accuracy;
     private transient int heartRate; // Para que no la serialice el GSON.
     private transient int rrTime; // Para que no la serialice el GSON.
-    
+
     public Double getLatitude() {
         return latitude;
     }
@@ -30,7 +30,7 @@ public class RoadSection implements Serializable {
         this.time = time;
         this.timeStamp = Constants.dfISO8601.format(time);
     }
-    
+
     public long getTime() {
         return time;
     }

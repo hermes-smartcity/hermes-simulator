@@ -419,12 +419,14 @@ public class SimulatedSmartDriver extends TimerTask {
             } else {
                 SimulatorController.increaseZtreamyErrors();
                 LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error SEND: Primera trama de la sección: {0} - Enviada a las: {1} - Errores: {2} / Total: {3}", new Object[]{dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
+                reconnectPublisher();
             }
         } catch (MalformedURLException ex) {
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error en la URL", ex);
         } catch (IOException ex) {
             SimulatorController.increaseZtreamyErrors();
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error I/O: {0} - Primera trama de la sección: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
+            reconnectPublisher();
             // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         } catch (Exception ex) {
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error desconocido: {0} - Primera trama de la sección: {1} - Enviada a las: {2} - Errores: {3} / Total: {4}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis()), SimulatorController.getZtreamyErrors(), SimulatorController.getZtreamySends()});
@@ -460,6 +462,6 @@ public class SimulatedSmartDriver extends TimerTask {
             // No puede pasar, porque habría pasado también en el constructor
             // y no lo ha hecho.
         }
-        LOG.log(Level.SEVERE, "Publisher reconnected");
+        LOG.log(Level.INFO, "reconnectPublisher() - Publisher reconnected");
     }
 }

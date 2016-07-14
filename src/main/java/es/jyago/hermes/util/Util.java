@@ -8,6 +8,10 @@ public class Util {
             + "[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$";
     private static final String ALPHANUMERIC = "^[a-zA-Z0-9]*$";
 
+    private Util() {
+        // Para prevenir la instanciación de la clase.
+    }
+
     public static String minutesToTimeString(int minutes) {
 
         long hours = TimeUnit.MINUTES.toHours(minutes);
@@ -52,17 +56,17 @@ public class Util {
     }
 
     /**
-     * Método para indicar la orientación que sigue, dado un punto de origen y otro de destino.
-     * La orientación es respecto a los ejes cardinales, siendo:
-     *      Norte....:   0 grados (ó 360 grados)
-     *      Este.....:  90 grados
-     *      Sur......: 180 grados
-     *      Oeste....: 270 grados
+     * Método para indicar la orientación que sigue, dado un punto de origen y
+     * otro de destino. La orientación es respecto a los ejes cardinales,
+     * siendo: Norte....: 0 grados (ó 360 grados) Este.....: 90 grados
+     * Sur......: 180 grados Oeste....: 270 grados
+     *
      * @param lat1 Latitud del punto de origen.
      * @param lng1 Longitud del punto de origen.
      * @param lat2 Latitud del punto de destino.
      * @param lng2 Longitud del punto de destino.
-     * @return Grados que definen la orientación, respecto a los ejes cardinales.
+     * @return Grados que definen la orientación, respecto a los ejes
+     * cardinales.
      */
     public static double bearing(double lat1, double lng1, double lat2, double lng2) {
         double latitude1 = Math.toRadians(lat1);

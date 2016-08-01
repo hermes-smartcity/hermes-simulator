@@ -62,27 +62,33 @@ public class SimulatorController implements Serializable {
     // Máximo retardo para iniciar la ruta, en milisegundos:
     private static final int MAX_INITIAL_DELAY = 60000;
 
-    // Número de errores contabilizados al enviar las tramas a Ztreamy.
-    private static volatile int ztreamyErrors;
-    // Número de tramas enviadas a Ztreamy
-    private static volatile int zTreamySends;
+    // Número de tramas de Ztreamy generadas.
+    private static volatile int ztreamyObjectsCount = 0;
+    // Número de errores contabilizados al enviar las tramas a Ztreamy, distintos de los 'no OK'.
+    private static volatile int ztreamyErrors = 0;
+    // Número de tramas enviadas a Ztreamy correctamente.
+    private static volatile int zTreamyOkSends = 0;
+    // Número de tramas enviadas a Ztreamy con recepción de 'no OK'.
+    private static volatile int zTreamyNoOkSends = 0;
+    // Número de tramas enviadas a Ztreamy con recepción de 'no OK' o erróneas, que se han podido reenviar.
+    private static volatile int zTreamyRecovered = 0;
     // Número de hilos en ejecución
-    private static volatile int runningThreads;
+    private static volatile int runningThreads = 0;
 
     private Marker marker;
 
     // Distancia del trayecto.
-    private static int distance;
+    private static int distance = 10;
     // Distancia desde el centro de Sevilla.
-    private static int distanceFromSevilleCenter;
+    private static int distanceFromSevilleCenter = 1;
     // Número de trayectos a generar.
-    private static int tracksAmount;
+    private static int tracksAmount = 1;
 
     private static MapModel simulatedMapModel;
     private static ArrayList<LocationLog> locationLogList;
 
     private static Map<String, Timer> simulationTimers;
-    private static int simulatedSmartDrivers;
+    private static int simulatedSmartDrivers = 1;
 
     @Inject
     @MessageBundle
@@ -93,15 +99,8 @@ public class SimulatorController implements Serializable {
 
     @PostConstruct
     public void init() {
-        distanceFromSevilleCenter = 1;
-        distance = 10;
-        tracksAmount = 1;
-        simulatedSmartDrivers = 1;
         marker = new Marker(new LatLng(SEVILLE.getLat(), SEVILLE.getLng()));
         marker.setDraggable(false);
-        ztreamyErrors = 0;
-        zTreamySends = 0;
-        runningThreads = 0;
 
         // Generamos trayectos con los parámetros iniciales.
         generateSimulatedTracks();
@@ -443,10 +442,10 @@ public class SimulatorController implements Serializable {
     public static void realTimeSimulate() {
         // Si el temporizador está instanciado, es que hay una simulación en marcha y se quiere parar.
         if (isSimulating()) {
-            if (ztreamyErrors > 0) {
-                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO: Errores: {0} / Total: {1}. Hilos restantes: {2}", new Object[]{ztreamyErrors, zTreamySends, runningThreads});
+            if (ztreamyErrors > 0 || zTreamyNoOkSends > 0) {
+                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n->Tramas generadas={0}\n->Oks={1}\n->NoOks={2}\n->Otros errores={3}\n->Recuperados={4}\n->Hilos restantes={5}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
             } else {
-                LOG.log(Level.INFO, "realTimeSimulate() - RESULTADO: Los envíos a Ztreamy se han realizado correctamente. Hilos restantes: {0}", runningThreads);
+                LOG.log(Level.INFO, "realTimeSimulate() - RESULTADO:\n\nLos envíos a Ztreamy se han realizado correctamente:\n\nTramas generadas={0}\nOks={1}\nHilos restantes={2}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, runningThreads});
             }
 
             for (Timer timer : simulationTimers.values()) {
@@ -457,7 +456,6 @@ public class SimulatorController implements Serializable {
             }
 
             LOG.log(Level.INFO, "realTimeSimulate() - Fin de la simulación: {0}", Constants.dfISO8601.format(System.currentTimeMillis()));
-            LOG.log(Level.INFO, "realTimeSimulate() - Se han enviado {0} tramas, de las que {1} han fallado", new Object[]{zTreamySends, ztreamyErrors});
             resetSimulation();
         } else {
             resetSimulation();
@@ -510,7 +508,10 @@ public class SimulatorController implements Serializable {
 
         resetCarMarkers();
         simulationTimers = null;
-        zTreamySends = 0;
+        ztreamyObjectsCount = 0;
+        zTreamyOkSends = 0;
+        zTreamyNoOkSends = 0;
+        zTreamyRecovered = 0;
         ztreamyErrors = 0;
     }
 
@@ -537,19 +538,27 @@ public class SimulatorController implements Serializable {
         return runningThreads == 0;
     }
 
-    public static synchronized void increaseZtreamySends() {
-        zTreamySends++;
+    public static synchronized void increaseZtreamyObjectsCount() {
+        ztreamyObjectsCount++;
     }
 
-    public static synchronized int getZtreamySends() {
-        return zTreamySends;
+    public static synchronized void increaseZtreamyOkSends() {
+        zTreamyOkSends++;
+    }
+
+    public static synchronized void increaseZtreamyNoOkSends() {
+        zTreamyNoOkSends++;
+    }
+
+    public static synchronized void increaseZtreamyRecovered() {
+        zTreamyRecovered++;
     }
 
     public static synchronized void increaseZtreamyErrors() {
         ztreamyErrors++;
     }
 
-    public static synchronized int getZtreamyErrors() {
-        return ztreamyErrors;
+    public static synchronized void logCurrentStatus() {
+        LOG.log(Level.SEVERE, "logCurrentStatus() - ESTADO ACTUAL: Tramas generadas={0}|Oks={1}|NoOks={2}|Otros errores={3}|Recuperados={4}|Hilos restantes={5}", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
     }
 }

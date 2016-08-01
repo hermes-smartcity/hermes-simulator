@@ -18,7 +18,7 @@ import org.eclipse.persistence.exceptions.DatabaseException;
 public class JsfUtil {
 
     private JsfUtil() {
-        // Para prevenir la instanciación de la clase.
+        // Para prevenir la instanciaciÃ³n de la clase.
     }
 
     public static SelectItem[] getSelectItems(List<?> entities, boolean selectOne) {
@@ -111,57 +111,57 @@ public class JsfUtil {
     }
 
     /**
-     * Método para mostrar un pequeño mensaje de ayuda, siempre que exista en el
+     * MÃ©todo para mostrar un pequeÃ±o mensaje de ayuda, siempre que exista en el
      * XHTML la etiqueta '<p:message>' con el identificador 'helpMessage'. Se
-     * creará una 'cookie' con vigencia de 10 años para que no se muestre el
-     * mensaje más de una vez, a menos que limpie las 'cookies' ;)
+     * crearÃ¡ una 'cookie' con vigencia de 10 aÃ±os para que no se muestre el
+     * mensaje mÃ¡s de una vez, a menos que limpie las 'cookies' ;)
      *
      * @param nameOfCookie Nombre de la 'cookie'
-     * @param message Mensaje que se mostrará en la zona de mensajes.
+     * @param message Mensaje que se mostrarÃ¡ en la zona de mensajes.
      */
     public static void showHelpMessage(String nameOfCookie, String message) {
         ExternalContext externalContext = FacesContext.getCurrentInstance().getExternalContext();
         Map<String, Object> requestCookieMap = externalContext.getRequestCookieMap();
 
-        // El mensaje de ayuda se mostrará si no existe la cookie.
+        // El mensaje de ayuda se mostrarÃ¡ si no existe la cookie.
         if (!requestCookieMap.containsKey(nameOfCookie)) {
             Map<String, Object> properties = new HashMap<>();
-            properties.put("maxAge", 315360000); // 10 años ;)
+            properties.put("maxAge", 315360000); // 10 aÃ±os ;)
             externalContext.addResponseCookie(nameOfCookie, Long.toString(new Date().getTime()), properties);
             FacesContext.getCurrentInstance().addMessage("helpMessage", new FacesMessage(FacesMessage.SEVERITY_INFO, ResourceBundle.getBundle("/Bundle").getString("Info"), message));
         }
     }
 
     /**
-     * Método para mostrar un pequeño mensaje de ayuda, siempre que exista en el
+     * MÃ©todo para mostrar un pequeÃ±o mensaje de ayuda, siempre que exista en el
      * XHTML la etiqueta '<p:message>' con el identificador 'helpMessage'.
      *
-     * @param message Mensaje que se mostrará en la zona de mensajes.
+     * @param message Mensaje que se mostrarÃ¡ en la zona de mensajes.
      */
     public static void showHelpMessage(String message) {
         FacesContext.getCurrentInstance().addMessage("helpMessage", new FacesMessage(FacesMessage.SEVERITY_INFO, ResourceBundle.getBundle("/Bundle").getString("Info"), message));
     }
 
     /**
-     * Método para mostrar el motivo de error, en el caso de ser una
-     * EJBException, de forma más detallada, ya que debido a un 'bug' de JPA (en
-     * la versión actual), no es posible obtener el detalle de otra forma
+     * MÃ©todo para mostrar el motivo de error, en el caso de ser una
+     * EJBException, de forma mÃ¡s detallada, ya que debido a un 'bug' de JPA (en
+     * la versiÃ³n actual), no es posible obtener el detalle de otra forma
      *
-     * @param ex Excepción de tipo 'EJBException'
+     * @param ex ExcepciÃ³n de tipo 'EJBException'
      */
     public static void showDetailedExceptionCauseMessage(EJBException ex) {
         try {
-            // Obtenemos la excepción de la capa de persistencia.
+            // Obtenemos la excepciÃ³n de la capa de persistencia.
             PersistenceException persistenceException = (PersistenceException) ex.getCausedByException().getCause();
-            // Comprobamos si es una excepción producida por la base de datos.
+            // Comprobamos si es una excepciÃ³n producida por la base de datos.
             if (persistenceException.getCause() instanceof DatabaseException) {
                 DatabaseException databaseException = (DatabaseException) persistenceException.getCause();
                 if (databaseException.getDatabaseErrorCode() == 1062) {
-                    // FIXME: Hacer genérico para cualquier base de datos. ¿Códigos de error para JPA?
+                    // FIXME: Hacer genÃ©rico para cualquier base de datos. Â¿CÃ³digos de error para JPA?
                     // Ya existe el usuario.
                     throw new Exception(ResourceBundle.getBundle("/Bundle").getString("ExistingData"));
                 } else if (databaseException.getDatabaseErrorCode() == 1048) {
-                    // FIXME: Hacer genérico para cualquier base de datos. ¿Códigos de error para JPA?
+                    // FIXME: Hacer genÃ©rico para cualquier base de datos. Â¿CÃ³digos de error para JPA?
                     // Datos de acceso incorrectos.
                     throw new Exception(ResourceBundle.getBundle("/Bundle").getString("InvalidAccessData"));
                 }

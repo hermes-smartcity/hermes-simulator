@@ -65,6 +65,7 @@
                         <h:inputHidden id="simulatedSmartDrivers" value="#{simulatorController.simulatedSmartDrivers}"/>
                         <p:slider for="simulatedSmartDrivers" minValue="1" maxValue="10000" display="outputSimulatedSmartDrivers" displayTemplate="#{bundle.SimulatedSmartDriversPerTrack} {value}"/>
 
+						<p:selectBooleanCheckbox value="#{simulatorController.retryOnFail}" itemLabel="#{bundle.RetryOnFail}" style="padding-top: 2px" />
                         <p:commandButton widgetVar="simulateButtonVar" id="simulateButton" value="#{simulatorController.isSimulating() ? bundle.StopSimulation : bundle.StartSimulation}" action="#{simulatorController.realTimeSimulate()}" update="gmapUpdater, gmap, generateButton, simulateButton" style="padding-top: 5px;"/>
                     </h:panelGrid>
                 </p:layoutUnit>

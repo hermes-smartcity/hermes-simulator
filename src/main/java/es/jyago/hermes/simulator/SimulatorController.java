@@ -83,6 +83,8 @@ public class SimulatorController implements Serializable {
     private static int distanceFromSevilleCenter = 1;
     // Número de trayectos a generar.
     private static int tracksAmount = 1;
+	// Indicará si se intenta reeenvíar los datos a Ztreamy.
+    static boolean retryOnFail = true;
 
     private static MapModel simulatedMapModel;
     private static ArrayList<LocationLog> locationLogList;
@@ -400,6 +402,14 @@ public class SimulatorController implements Serializable {
         tracksAmount = ta;
     }
 
+    public boolean isRetryOnFail() {
+        return retryOnFail;
+    }
+    
+    public void setRetryOnFail(boolean rof) {
+        retryOnFail = rof;
+    }
+
     public int getSimulatedSmartDrivers() {
         return simulatedSmartDrivers;
     }
@@ -443,9 +453,9 @@ public class SimulatorController implements Serializable {
         // Si el temporizador está instanciado, es que hay una simulación en marcha y se quiere parar.
         if (isSimulating()) {
             if (ztreamyErrors > 0 || zTreamyNoOkSends > 0) {
-                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n->Tramas generadas={0}\n->Oks={1}\n->NoOks={2}\n->Otros errores={3}\n->Recuperados={4}\n->Hilos restantes={5}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
+                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n->Tramas generadas={0}\n-> Oks={1}\n-> NoOks={2}\n-> Otros errores={3}\n-> Recuperados={4}\n-> Hilos restantes={5}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
             } else {
-                LOG.log(Level.INFO, "realTimeSimulate() - RESULTADO:\n\nLos envíos a Ztreamy se han realizado correctamente:\n\nTramas generadas={0}\nOks={1}\nHilos restantes={2}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, runningThreads});
+                LOG.log(Level.INFO, "realTimeSimulate() - RESULTADO:\n\nLos envíos a Ztreamy se han realizado correctamente:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> Hilos restantes={2}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, runningThreads});
             }
 
             for (Timer timer : simulationTimers.values()) {
@@ -461,7 +471,7 @@ public class SimulatorController implements Serializable {
             resetSimulation();
             simulationTimers = new HashMap<>();
             LOG.log(Level.INFO, "realTimeSimulate() - Comienzo de la simulación: {0}", Constants.dfISO8601.format(System.currentTimeMillis()));
-            LOG.log(Level.INFO, "realTimeSimulate() - Condiciones: Actualización cada segundo (Tiempo real)");
+            LOG.log(Level.INFO, "realTimeSimulate() - Condiciones:\n-> Actualización cada segundo (Tiempo real)\n-> ¿Reenviar tramas fallidas?: ", retryOnFail);
             runningThreads = simulatedSmartDrivers * locationLogList.size();
             LOG.log(Level.INFO, "realTimeSimulate() - Se crean: {0} hilos de ejecución", runningThreads);
             try {

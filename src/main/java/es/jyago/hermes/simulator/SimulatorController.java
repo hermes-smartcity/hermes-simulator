@@ -36,6 +36,8 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import org.apache.commons.io.IOUtils;
 import org.joda.time.LocalTime;
+import org.joda.time.Period;
+import org.joda.time.format.ISOPeriodFormat;
 import org.primefaces.context.RequestContext;
 import org.primefaces.event.map.OverlaySelectEvent;
 import org.primefaces.model.map.DefaultMapModel;
@@ -83,14 +85,16 @@ public class SimulatorController implements Serializable {
     private static int distanceFromSevilleCenter = 1;
     // Número de trayectos a generar.
     private static int tracksAmount = 1;
-	// Indicará si se intenta reeenvíar los datos a Ztreamy.
+    // Indicará si se intenta reeenvíar los datos a Ztreamy.
     static boolean retryOnFail = true;
 
     private static MapModel simulatedMapModel;
     private static ArrayList<LocationLog> locationLogList;
 
-    private static Map<String, Timer> simulationTimers;
+    private static Map<String, Timer> simulationTimers = null;
     private static int simulatedSmartDrivers = 1;
+    private static long startSimulationTime = 0l;
+    private static long endSimulationTime = 0l;
 
     @Inject
     @MessageBundle
@@ -405,7 +409,7 @@ public class SimulatorController implements Serializable {
     public boolean isRetryOnFail() {
         return retryOnFail;
     }
-    
+
     public void setRetryOnFail(boolean rof) {
         retryOnFail = rof;
     }
@@ -453,7 +457,7 @@ public class SimulatorController implements Serializable {
         // Si el temporizador está instanciado, es que hay una simulación en marcha y se quiere parar.
         if (isSimulating()) {
             if (ztreamyErrors > 0 || zTreamyNoOkSends > 0) {
-                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n->Tramas generadas={0}\n-> Oks={1}\n-> NoOks={2}\n-> Otros errores={3}\n-> Recuperados={4}\n-> Hilos restantes={5}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
+                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> NoOks={2}\n-> Otros errores={3}\n-> Recuperados={4}\n-> Hilos restantes={5}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
             } else {
                 LOG.log(Level.INFO, "realTimeSimulate() - RESULTADO:\n\nLos envíos a Ztreamy se han realizado correctamente:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> Hilos restantes={2}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, runningThreads});
             }
@@ -465,12 +469,16 @@ public class SimulatorController implements Serializable {
                 }
             }
 
-            LOG.log(Level.INFO, "realTimeSimulate() - Fin de la simulación: {0}", Constants.dfISO8601.format(System.currentTimeMillis()));
+            endSimulationTime = System.currentTimeMillis();
+            Period period = new Period(endSimulationTime - startSimulationTime);
+            String formattedPeriod = ISOPeriodFormat.standard().print(period);
+            LOG.log(Level.INFO, "realTimeSimulate() - Inicio de la simulacion: {0} -> Fin de la simulación: {1} ({2})", new Object[]{Constants.dfISO8601.format(startSimulationTime), Constants.dfISO8601.format(endSimulationTime), formattedPeriod});
             resetSimulation();
         } else {
             resetSimulation();
             simulationTimers = new HashMap<>();
-            LOG.log(Level.INFO, "realTimeSimulate() - Comienzo de la simulación: {0}", Constants.dfISO8601.format(System.currentTimeMillis()));
+            startSimulationTime = System.currentTimeMillis();
+            LOG.log(Level.INFO, "realTimeSimulate() - Comienzo de la simulación: {0}", Constants.dfISO8601.format(startSimulationTime));
             LOG.log(Level.INFO, "realTimeSimulate() - Condiciones:\n-> Actualización cada segundo (Tiempo real)\n-> ¿Reenviar tramas fallidas?: ", retryOnFail);
             runningThreads = simulatedSmartDrivers * locationLogList.size();
             LOG.log(Level.INFO, "realTimeSimulate() - Se crean: {0} hilos de ejecución", runningThreads);

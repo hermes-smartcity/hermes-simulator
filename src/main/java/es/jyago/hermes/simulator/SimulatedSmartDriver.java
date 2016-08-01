@@ -11,12 +11,12 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.TimerTask;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
@@ -50,6 +50,7 @@ public class SimulatedSmartDriver extends TimerTask {
     private static final String VEHICLE_LOCATION = "Vehicle Location";
 
     // Parámetros míos de la simulación.
+    private static final SecureRandom RANDOM = new SecureRandom();
     private int stressLoad; // Indicará el nivel de carga de estrés.
     private boolean relaxing; // Indicará si el usuario está relajándose tras una carga de estrés.
 
@@ -104,7 +105,7 @@ public class SimulatedSmartDriver extends TimerTask {
         this.pendingVehicleLocationList = new ArrayList();
         this.pendingDataSectionList = new ArrayList();
         if (variableSpeed) {
-            speedRandomFactor = 0.5d + (new Random().nextDouble() * 1.0d);
+            speedRandomFactor = 0.5d + (RANDOM.nextDouble() * 1.0d);
             localLocationLogDetailList = new ArrayList<>();
             for (LocationLogDetail lld : ll.getLocationLogDetailList()) {
                 // Aplicamos la variación aleatoria de la velocidad.
@@ -243,7 +244,6 @@ public class SimulatedSmartDriver extends TimerTask {
                 sendEvery10SecondsIfLocationChanged(currentLocationLogDetail);
             } else if (SimulatorController.retryOnFail && !pendingVehicleLocationList.isEmpty()) {
                 // Aprovechamos que no toca envío de 'Vehicle Location' para probar a enviar los que hubieran fallado.
-
                 try {
                     int result = publisher.publish(new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, VEHICLE_LOCATION, (Map<String, Object>) pendingVehicleLocationList.get(0)), true);
                     if (result == HttpURLConnection.HTTP_OK) {
@@ -255,7 +255,6 @@ public class SimulatedSmartDriver extends TimerTask {
                         SimulatorController.logCurrentStatus();
                         reconnectPublisher();
                     }
-
                 } catch (IOException ex) {
                     SimulatorController.increaseZtreamyErrors();
                     LOG.log(Level.SEVERE, "*Reintento* - Error I/O: {0} - No se ha podido reenviar un 'Vehicle Location' pendiente");

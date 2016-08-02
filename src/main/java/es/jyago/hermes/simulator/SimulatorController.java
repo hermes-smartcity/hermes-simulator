@@ -35,9 +35,8 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.inject.Named;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.time.DurationFormatUtils;
 import org.joda.time.LocalTime;
-import org.joda.time.Period;
-import org.joda.time.format.ISOPeriodFormat;
 import org.primefaces.context.RequestContext;
 import org.primefaces.event.map.OverlaySelectEvent;
 import org.primefaces.model.map.DefaultMapModel;
@@ -74,6 +73,8 @@ public class SimulatorController implements Serializable {
     private static volatile int zTreamyNoOkSends = 0;
     // Número de tramas enviadas a Ztreamy con recepción de 'no OK' o erróneas, que se han podido reenviar.
     private static volatile int zTreamyRecovered = 0;
+    // Número de tramas enviadas a Ztreamy que no se han podido reenviar porque ha terminado la simulación de cada trayecto.
+    private static volatile int zTreamyFinallyPending = 0;
     // Número de hilos en ejecución
     private static volatile int runningThreads = 0;
 
@@ -457,7 +458,7 @@ public class SimulatorController implements Serializable {
         // Si el temporizador está instanciado, es que hay una simulación en marcha y se quiere parar.
         if (isSimulating()) {
             if (ztreamyErrors > 0 || zTreamyNoOkSends > 0) {
-                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> NoOks={2}\n-> Otros errores={3}\n-> Recuperados={4}\n-> Hilos restantes={5}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
+                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> NoOks={2}\n-> Otros errores={3}\n-> Recuperados={4}\n-> No enviados finalmente={5}\n-> Hilos restantes={6}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, zTreamyFinallyPending, runningThreads});
             } else {
                 LOG.log(Level.INFO, "realTimeSimulate() - RESULTADO:\n\nLos envíos a Ztreamy se han realizado correctamente:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> Hilos restantes={2}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, runningThreads});
             }
@@ -470,9 +471,7 @@ public class SimulatorController implements Serializable {
             }
 
             endSimulationTime = System.currentTimeMillis();
-            Period period = new Period(endSimulationTime - startSimulationTime);
-            String formattedPeriod = ISOPeriodFormat.standard().print(period);
-            LOG.log(Level.INFO, "realTimeSimulate() - Inicio de la simulacion: {0} -> Fin de la simulación: {1} ({2})", new Object[]{Constants.dfISO8601.format(startSimulationTime), Constants.dfISO8601.format(endSimulationTime), formattedPeriod});
+            LOG.log(Level.INFO, "realTimeSimulate() - Inicio de la simulacion: {0} -> Fin de la simulación: {1} ({2})", new Object[]{Constants.dfISO8601.format(startSimulationTime), Constants.dfISO8601.format(endSimulationTime), DurationFormatUtils.formatDuration(endSimulationTime - startSimulationTime, "HH:mm:ss", true)});
             resetSimulation();
         } else {
             resetSimulation();
@@ -576,7 +575,11 @@ public class SimulatorController implements Serializable {
         ztreamyErrors++;
     }
 
+    public static synchronized void addZtreamyFinallyPending(int pending) {
+        zTreamyFinallyPending += pending;
+    }
+
     public static synchronized void logCurrentStatus() {
-        LOG.log(Level.SEVERE, "logCurrentStatus() - ESTADO ACTUAL: Tramas generadas={0}|Oks={1}|NoOks={2}|Otros errores={3}|Recuperados={4}|Hilos restantes={5}", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, runningThreads});
+        LOG.log(Level.SEVERE, "logCurrentStatus() - ESTADO ACTUAL: Tramas generadas={0}|Oks={1}|NoOks={2}|Otros errores={3}|Recuperados={4}|No enviados finalmente={5}|Hilos restantes={6}", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, zTreamyFinallyPending, runningThreads});
     }
 }

@@ -140,6 +140,7 @@ public class SimulatedSmartDriver extends TimerTask {
                     // Descontamos el hilo actual.
                     SimulatorController.finishOneThread();
                     LOG.log(Level.FINE, "SimulatedSmartDriver.run() - Hilos de ejecución restantes: {0}", SimulatorController.getRunningThreads());
+                    SimulatorController.addZtreamyFinallyPending(pendingVehicleLocationList.size() + pendingDataSectionList.size());
                     this.cancel();
                 } else {
                     // No hemos llegado al destino, avanzamos de posición.
@@ -295,7 +296,7 @@ public class SimulatedSmartDriver extends TimerTask {
 
             elapsedSeconds++;
             ztreamySecondsCount++;
-            LOG.log(Level.FINE, "SimulatedSmartDriver.run() - Tiempo de simulación transcurrido: {0}", DurationFormatUtils.formatDuration(elapsedSeconds * 1000, "HH:mm:ss", true));
+            LOG.log(Level.FINE, "SimulatedSmartDriver.run() - Tiempo de simulación transcurrido: {0}", DurationFormatUtils.formatDuration(elapsedSeconds * 1000l, "HH:mm:ss", true));
         }
     }
 
@@ -395,7 +396,6 @@ public class SimulatedSmartDriver extends TimerTask {
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error I/O: {0} - Trama: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
             reconnectPublisher();
-            // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         } catch (Exception ex) {
             SimulatorController.increaseZtreamyErrors();
             if (SimulatorController.retryOnFail) {
@@ -404,7 +404,6 @@ public class SimulatedSmartDriver extends TimerTask {
             }
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error desconocido: {0} - Trama: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
-            // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         }
     }
 
@@ -504,7 +503,6 @@ public class SimulatedSmartDriver extends TimerTask {
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error I/O: {0} - Primera trama de la sección: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
             reconnectPublisher();
-            // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         } catch (Exception ex) {
             SimulatorController.increaseZtreamyErrors();
             if (SimulatorController.retryOnFail) {
@@ -513,7 +511,6 @@ public class SimulatedSmartDriver extends TimerTask {
             }
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error desconocido: {0} - Primera trama de la sección: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
-            // FIXME: ¿Qué hacemos con los que no se hayan podido mandar? ¿Los guardamos y los intentamos enviar después?
         }
 
         // Reiniciamos los acumulados.

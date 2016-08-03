@@ -530,6 +530,7 @@ public class SimulatorController implements Serializable {
         zTreamyNoOkSends = 0;
         zTreamyRecovered = 0;
         ztreamyErrors = 0;
+        zTreamyFinallyPending = 0;
     }
 
     private static void resetCarMarkers() {

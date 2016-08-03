@@ -257,7 +257,6 @@ public class SimulatedSmartDriver extends TimerTask {
                         reconnectPublisher();
                     }
                 } catch (IOException ex) {
-                    SimulatorController.increaseZtreamyErrors();
                     LOG.log(Level.SEVERE, "*Reintento* - Error I/O: {0} - No se ha podido reenviar un 'Vehicle Location' pendiente");
                     SimulatorController.logCurrentStatus();
                     reconnectPublisher();
@@ -281,7 +280,6 @@ public class SimulatedSmartDriver extends TimerTask {
                         reconnectPublisher();
                     }
                 } catch (IOException ex) {
-                    SimulatorController.increaseZtreamyErrors();
                     LOG.log(Level.SEVERE, "*Reintento* - Error I/O: {0} - No se ha podido reenviar un 'Data Section' pendiente");
                     SimulatorController.logCurrentStatus();
                     reconnectPublisher();
@@ -404,6 +402,9 @@ public class SimulatedSmartDriver extends TimerTask {
             }
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error desconocido: {0} - Trama: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
+        } finally {
+            // Iniciamos el contador de tiempo para el siguiente envío.
+            ztreamySecondsCount = 0;
         }
     }
 
@@ -511,12 +512,12 @@ public class SimulatedSmartDriver extends TimerTask {
             }
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error desconocido: {0} - Primera trama de la sección: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
+        } finally {
+            // Reiniciamos los acumulados.
+            roadSectionList.clear();
+            cummulativePositiveSpeeds = 0.0d;
+            sectionDistance = 0.0d;
         }
-
-        // Reiniciamos los acumulados.
-        roadSectionList.clear();
-        cummulativePositiveSpeeds = 0.0d;
-        sectionDistance = 0.0d;
     }
 
     private double analyzePKE(LocationLogDetail lld, LocationLogDetail lldPrev) {

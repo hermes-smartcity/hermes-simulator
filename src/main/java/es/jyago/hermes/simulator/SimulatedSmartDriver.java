@@ -1,5 +1,6 @@
 package es.jyago.hermes.simulator;
 
+import es.jyago.hermes.csv.CSVEvent;
 import es.jyago.hermes.location.LocationLog;
 import es.jyago.hermes.location.detail.LocationLogDetail;
 import es.jyago.hermes.smartDriver.DataSection;
@@ -16,7 +17,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.TimerTask;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
@@ -68,11 +68,14 @@ public class SimulatedSmartDriver extends TimerTask {
     private double cummulativePositiveSpeeds;
     private final List<RoadSection> roadSectionList;
     private int ztreamySecondsCount;
+    private int ztreamySecondsBetweenRetries;
     private final int minRrTime;
     private final String sha;
 
-    private final List<Object> pendingVehicleLocationList;
-    private final List<Object> pendingDataSectionList;
+    private final List<Event> pendingVehicleLocations;
+    private final List<Event> pendingDataSections;
+
+    private final List<CSVEvent> csvEventList;
 
     /**
      * Constructor para cada instancia de 'SmartDriver'.
@@ -97,13 +100,14 @@ public class SimulatedSmartDriver extends TimerTask {
         this.roadSectionList = new ArrayList();
         this.cummulativePositiveSpeeds = 0.0d;
         this.ztreamySecondsCount = 0;
+        this.ztreamySecondsBetweenRetries = 0;
         this.stressLoad = 0; // Suponemos que inicialmente no está estresado.
         int age = ThreadLocalRandom.current().nextInt(18, 65 + 1); // Simularemos conductores de distintas edades (entre 18 y 65 años), para establecer el ritmo cardíaco máximo en la simulación.
         this.minRrTime = (int) Math.ceil(60000.0d / (220 - age)); // Mínimo R-R, que establecerá el ritmo cardíaco máximo.
         this.publisher = new PublisherHC(new URL(URL), new JSONSerializer());
         this.sha = new String(Hex.encodeHex(DigestUtils.sha256(System.currentTimeMillis() + ll.getPerson().getEmail())));
-        this.pendingVehicleLocationList = new ArrayList();
-        this.pendingDataSectionList = new ArrayList();
+        this.pendingVehicleLocations = new ArrayList<>();
+        this.pendingDataSections = new ArrayList<>();
         if (variableSpeed) {
             speedRandomFactor = 0.5d + (RANDOM.nextDouble() * 1.0d);
             localLocationLogDetailList = new ArrayList<>();
@@ -113,6 +117,7 @@ public class SimulatedSmartDriver extends TimerTask {
                 localLocationLogDetailList.add(new LocationLogDetail(lld.getLatitude(), lld.getLongitude(), newSpeed, lld.getHeartRate(), lld.getRrTime(), (int) (Math.ceil(lld.getSecondsToBeHere() / speedRandomFactor))));
             }
         }
+        this.csvEventList = new ArrayList();
         // FIXME: Hacer variable el ritmo cardíaco.
     }
 
@@ -139,8 +144,11 @@ public class SimulatedSmartDriver extends TimerTask {
                     finished = true;
                     // Descontamos el hilo actual.
                     SimulatorController.finishOneThread();
+                    LOG.log(Level.FINE, "SimulatedSmartDriver.run() - El usuario ha llegado a su destino en: {0}", DurationFormatUtils.formatDuration(elapsedSeconds * 1000l, "HH:mm:ss", true));
                     LOG.log(Level.FINE, "SimulatedSmartDriver.run() - Hilos de ejecución restantes: {0}", SimulatorController.getRunningThreads());
-                    SimulatorController.addZtreamyFinallyPending(pendingVehicleLocationList.size() + pendingDataSectionList.size());
+                    SimulatorController.addZtreamyFinallyPending(pendingVehicleLocations.size() + pendingDataSections.size());
+
+                    SimulatorController.addCSVEvents(csvEventList);
                     this.cancel();
                 } else {
                     // No hemos llegado al destino, avanzamos de posición.
@@ -243,46 +251,68 @@ public class SimulatedSmartDriver extends TimerTask {
             if (locationChanged && isTimeToSend()) {
                 // Sólo si cambiamos de posición y han pasado más de 10 segundos, se envía información a 'Ztreamy'.
                 sendEvery10SecondsIfLocationChanged(currentLocationLogDetail);
-            } else if (SimulatorController.retryOnFail && !pendingVehicleLocationList.isEmpty()) {
-                // Aprovechamos que no toca envío de 'Vehicle Location' para probar a enviar los que hubieran fallado.
-                try {
-                    int result = publisher.publish(new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, VEHICLE_LOCATION, (Map<String, Object>) pendingVehicleLocationList.get(0)), true);
-                    if (result == HttpURLConnection.HTTP_OK) {
-                        SimulatorController.increaseZtreamyRecovered();
-                        LOG.log(Level.FINE, "*Reintento* - Localización de trayecto simulado enviada correctamante. SmartDriver: {0}", ll.getPerson().getEmail());
-                        pendingVehicleLocationList.remove(0);
-                    } else {
-                        LOG.log(Level.SEVERE, "*Reintento* - Error SEND (Not OK): No se ha podido reenviar un 'Vehicle Location' pendiente");
+            } else if (!pendingVehicleLocations.isEmpty()) {
+
+                // Vemos si ha pasado suficiente tiempo entre reintentos.
+                if (isTimeToRetry()) {
+                    /////////////////////////////////////////////////////
+                    // REINTENTO DE ENVÍO DE VEHICLE LOCATION FALLIDOS //
+                    /////////////////////////////////////////////////////
+                    // Aprovechamos que no toca envío de 'Vehicle Location' para probar a enviar los que hubieran fallado.
+                    try {
+                        SimulatorController.increaseZtreamySends();
+                        Event[] events = new Event[pendingVehicleLocations.size()];
+                        int result = publisher.publish(pendingVehicleLocations.toArray(events), true);
+                        if (result == HttpURLConnection.HTTP_OK) {
+                            SimulatorController.addZtreamyRecovered(events.length);
+                            LOG.log(Level.INFO, "*Reintento* - {0} 'Vehicle Location' pendientes enviadas correctamante. SmartDriver: {1}", new Object[]{events.length, ll.getPerson().getEmail()});
+                            pendingVehicleLocations.clear();
+                        } else {
+                            LOG.log(Level.SEVERE, "*Reintento* - Error SEND (Not OK): No se han podido reenviar los {0} 'Vehicle Location' pendientes", events.length);
+                            SimulatorController.logCurrentStatus();
+                            reconnectPublisher();
+                        }
+                    } catch (Exception ex) {
+                        LOG.log(Level.SEVERE, "*Reintento* - Error: {0} - No se han podido reenviar los {1} 'Vehicle Location' pendientes", new Object[]{ex.getMessage(), pendingVehicleLocations.size()});
                         SimulatorController.logCurrentStatus();
                         reconnectPublisher();
+                    } finally {
+                        ztreamySecondsBetweenRetries = 0;
                     }
-                } catch (IOException ex) {
-                    LOG.log(Level.SEVERE, "*Reintento* - Error I/O: {0} - No se ha podido reenviar un 'Vehicle Location' pendiente");
-                    SimulatorController.logCurrentStatus();
-                    reconnectPublisher();
                 }
             }
 
             // Se enviará un resumen cada 500 metros.
             if (sectionDistance >= ZTREAMY_SEND_INTERVAL_METERS) {
                 sendDataSectionToZtreamy();
-            } else if (SimulatorController.retryOnFail && !pendingDataSectionList.isEmpty()) {
-                // Aprovechamos que no toca envío de 'Data Section' para probar a enviar los que hubieran fallado.
-                try {
-                    int result = publisher.publish(new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, DATA_SECTION, (Map<String, Object>) pendingDataSectionList.get(0)), true);
-                    if (result == HttpURLConnection.HTTP_OK) {
-                        SimulatorController.increaseZtreamyRecovered();
-                        LOG.log(Level.FINE, "*Reintento* - Datos de sección de trayecto simulado enviada correctamante. SmartDriver: {0}", ll.getPerson().getEmail());
-                        pendingDataSectionList.remove(0);
-                    } else {
-                        LOG.log(Level.SEVERE, "*Reintento* - Error SEND (Not OK): No se ha podido reenviar un 'Data Section' pendiente");
+            } else if (!pendingDataSections.isEmpty()) {
+
+                // Vemos si ha pasado suficiente tiempo entre reintentos.
+                if (isTimeToRetry()) {
+                    /////////////////////////////////////////////////
+                    // REINTENTO DE ENVÍO DE DATA SECTION FALLIDOS //
+                    /////////////////////////////////////////////////
+                    // Aprovechamos que no toca envío de 'Data Section' para probar a enviar los que hubieran fallado.
+                    try {
+                        SimulatorController.increaseZtreamySends();
+                        Event[] events = new Event[pendingDataSections.size()];
+                        int result = publisher.publish(pendingDataSections.toArray(events), true);
+                        if (result == HttpURLConnection.HTTP_OK) {
+                            SimulatorController.addZtreamyRecovered(events.length);
+                            LOG.log(Level.INFO, "*Reintento* - {0} 'Data Section' pendientes enviados correctamante. SmartDriver: {1}", new Object[]{events.length, ll.getPerson().getEmail()});
+                            pendingDataSections.clear();
+                        } else {
+                            LOG.log(Level.SEVERE, "*Reintento* - Error SEND (Not OK): No se han podido reenviar los {0} 'Data Section' pendientes", events.length);
+                            SimulatorController.logCurrentStatus();
+                            reconnectPublisher();
+                        }
+                    } catch (Exception ex) {
+                        LOG.log(Level.SEVERE, "*Reintento* - Error: {0} - No se han podido reenviar los {1} 'Data Section' pendientes", new Object[]{ex.getMessage(), pendingDataSections.size()});
                         SimulatorController.logCurrentStatus();
                         reconnectPublisher();
+                    } finally {
+                        ztreamySecondsBetweenRetries = 0;
                     }
-                } catch (IOException ex) {
-                    LOG.log(Level.SEVERE, "*Reintento* - Error I/O: {0} - No se ha podido reenviar un 'Data Section' pendiente");
-                    SimulatorController.logCurrentStatus();
-                    reconnectPublisher();
                 }
             }
 
@@ -290,12 +320,23 @@ public class SimulatedSmartDriver extends TimerTask {
             if (SimulatorController.isAllSimulationsFinished()) {
                 LOG.log(Level.INFO, "SimulatedSmartDriver.run() - Todos los hilos completados");
                 SimulatorController.realTimeSimulate();
+            } else if (isEmergencyShutdown()) {
+                LOG.log(Level.SEVERE, "SimulatedSmartDriver.run() - Se fuerza el fin de la simulación, por durar demasiado: {0}", DurationFormatUtils.formatDuration(elapsedSeconds * 1000l, "HH:mm:ss", true));
+                SimulatorController.realTimeSimulate();
             }
 
             elapsedSeconds++;
             ztreamySecondsCount++;
+            if (!pendingVehicleLocations.isEmpty() || !pendingDataSections.isEmpty()) {
+                ztreamySecondsBetweenRetries++;
+            }
             LOG.log(Level.FINE, "SimulatedSmartDriver.run() - Tiempo de simulación transcurrido: {0}", DurationFormatUtils.formatDuration(elapsedSeconds * 1000l, "HH:mm:ss", true));
         }
+    }
+
+    private boolean isEmergencyShutdown() {
+        // Si han pasado 4 horas de simulación y no ha terminado, forzamos la cancelación.
+        return (System.currentTimeMillis() - SimulatorController.startSimulationTime) >= 14400000;
     }
 
     private void stressForDeviation(double bearingDiff) {
@@ -349,6 +390,10 @@ public class SimulatedSmartDriver extends TimerTask {
         return ztreamySecondsCount >= ZTREAMY_SEND_INTERVAL_SECONDS;
     }
 
+    private boolean isTimeToRetry() {
+        return ztreamySecondsBetweenRetries >= SimulatorController.secondsBetweenRetries;
+    }
+
     private void sendEvery10SecondsIfLocationChanged(LocationLogDetail currentLocationLogDetail) {
         // Creamos un objeto de tipo 'Location' de los que 'SmartDriver' envía a 'Ztreamy'.
         es.jyago.hermes.smartDriver.Location smartDriverLocation = new es.jyago.hermes.smartDriver.Location();
@@ -362,10 +407,14 @@ public class SimulatedSmartDriver extends TimerTask {
 
         HashMap<String, Object> bodyObject = new HashMap<>();
         bodyObject.put("Location", smartDriverLocation);
-        SimulatorController.increaseZtreamyObjectsCount();
+        SimulatorController.increaseZtreamyObjects();
+
+        Event event = new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, VEHICLE_LOCATION, bodyObject);
+        csvEventList.add(new CSVEvent(event.getEventId(), event.getTimestamp()));
 
         try {
-            int result = publisher.publish(new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, VEHICLE_LOCATION, bodyObject), true);
+            SimulatorController.increaseZtreamySends();
+            int result = publisher.publish(event, true);
 
             if (result == HttpURLConnection.HTTP_OK) {
                 SimulatorController.increaseZtreamyOkSends();
@@ -373,35 +422,28 @@ public class SimulatedSmartDriver extends TimerTask {
                 locationChanged = false;
             } else {
                 SimulatorController.increaseZtreamyNoOkSends();
-                if (SimulatorController.retryOnFail) {
-                    // Si ha fallado, almacenamos el 'Vehicle Location' que se debería haber enviado y lo intentamos luego.
-                    pendingVehicleLocationList.add(bodyObject);
-                }
+                // Si ha fallado, almacenamos el 'Vehicle Location' que se debería haber enviado y lo intentamos luego.
+                pendingVehicleLocations.add(event);
                 LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error SEND (Not OK): Trama: {0} - Enviada a las: {1}", new Object[]{Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis())});
                 SimulatorController.logCurrentStatus();
                 reconnectPublisher();
             }
-            // Iniciamos el contador de tiempo para el siguiente envío.
-            ztreamySecondsCount = 0;
         } catch (MalformedURLException ex) {
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error en la URL", ex);
         } catch (IOException ex) {
             SimulatorController.increaseZtreamyErrors();
-            if (SimulatorController.retryOnFail) {
-                // Si ha fallado, almacenamos el 'Vehicle Location' que se debería haber enviado y lo intentamos luego.
-                pendingVehicleLocationList.add(bodyObject);
-            }
+            // Si ha fallado, almacenamos el 'Vehicle Location' que se debería haber enviado y lo intentamos luego.
+            pendingVehicleLocations.add(event);
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error I/O: {0} - Trama: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
             reconnectPublisher();
         } catch (Exception ex) {
             SimulatorController.increaseZtreamyErrors();
-            if (SimulatorController.retryOnFail) {
-                // Si ha fallado, almacenamos el 'Vehicle Location' que se debería haber enviado y lo intentamos luego.
-                pendingVehicleLocationList.add(bodyObject);
-            }
+            // Si ha fallado, almacenamos el 'Vehicle Location' que se debería haber enviado y lo intentamos luego.
+            pendingVehicleLocations.add(event);
             LOG.log(Level.SEVERE, "sendEvery10SecondsIfLocationChanged() - Error desconocido: {0} - Trama: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), Constants.dfISO8601.format(currentLocationLogDetail.getTimeLog()), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
+            reconnectPublisher();
         } finally {
             // Iniciamos el contador de tiempo para el siguiente envío.
             ztreamySecondsCount = 0;
@@ -475,20 +517,22 @@ public class SimulatedSmartDriver extends TimerTask {
 
         HashMap<String, Object> bodyObject = new HashMap<>();
         bodyObject.put(DATA_SECTION, dataSection);
-        SimulatorController.increaseZtreamyObjectsCount();
+        SimulatorController.increaseZtreamyObjects();
+
+        Event event = new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, DATA_SECTION, bodyObject);
+        csvEventList.add(new CSVEvent(event.getEventId(), event.getTimestamp()));
 
         try {
-            int result = publisher.publish(new Event(sha, MediaType.APPLICATION_JSON, Constants.SIMULATOR_APPLICATION_ID, DATA_SECTION, bodyObject), true);
+            SimulatorController.increaseZtreamySends();
+            int result = publisher.publish(event, true);
 
             if (result == HttpURLConnection.HTTP_OK) {
                 SimulatorController.increaseZtreamyOkSends();
                 LOG.log(Level.FINE, "sendDataSectionToZtreamy() - Datos de sección de trayecto simulado enviada correctamante. SmartDriver: {0}", ll.getPerson().getEmail());
             } else {
                 SimulatorController.increaseZtreamyNoOkSends();
-                if (SimulatorController.retryOnFail) {
-                    // Si ha fallado, almacenamos el 'Data Section' que se debería haber enviado y lo intentamos luego.
-                    pendingDataSectionList.add(bodyObject);
-                }
+                // Si ha fallado, almacenamos el 'Data Section' que se debería haber enviado y lo intentamos luego.
+                pendingDataSections.add(event);
                 LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error SEND (Not OK): Primera trama de la sección: {0} - Enviada a las: {1}", new Object[]{dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis())});
                 SimulatorController.logCurrentStatus();
                 reconnectPublisher();
@@ -497,21 +541,18 @@ public class SimulatedSmartDriver extends TimerTask {
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error en la URL", ex);
         } catch (IOException ex) {
             SimulatorController.increaseZtreamyErrors();
-            if (SimulatorController.retryOnFail) {
-                // Si ha fallado, almacenamos el 'Data Section' que se debería haber enviado y lo intentamos luego.
-                pendingDataSectionList.add(bodyObject);
-            }
+            // Si ha fallado, almacenamos el 'Data Section' que se debería haber enviado y lo intentamos luego.
+            pendingDataSections.add(event);
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error I/O: {0} - Primera trama de la sección: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
             reconnectPublisher();
         } catch (Exception ex) {
             SimulatorController.increaseZtreamyErrors();
-            if (SimulatorController.retryOnFail) {
-                // Si ha fallado, almacenamos el 'Data Section' que se debería haber enviado y lo intentamos luego.
-                pendingDataSectionList.add(bodyObject);
-            }
+            // Si ha fallado, almacenamos el 'Data Section' que se debería haber enviado y lo intentamos luego.
+            pendingDataSections.add(event);
             LOG.log(Level.SEVERE, "sendDataSectionToZtreamy() - Error desconocido: {0} - Primera trama de la sección: {1} - Enviada a las: {2}", new Object[]{ex.getMessage(), dataSection.getRoadSection().get(0).getTimeStamp(), Constants.dfISO8601.format(System.currentTimeMillis())});
             SimulatorController.logCurrentStatus();
+            reconnectPublisher();
         } finally {
             // Reiniciamos los acumulados.
             roadSectionList.clear();
@@ -543,6 +584,6 @@ public class SimulatedSmartDriver extends TimerTask {
             // No puede pasar, porque habría pasado también en el constructor
             // y no lo ha hecho.
         }
-        LOG.log(Level.INFO, "reconnectPublisher() - Publisher reconnected");
+        LOG.log(Level.FINE, "reconnectPublisher() - Publisher reconnected");
     }
 }

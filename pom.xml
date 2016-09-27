@@ -4,7 +4,7 @@
 
     <groupId>es.jyago.hermes</groupId>
     <artifactId>HermesSimulator</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1</version>
     <packaging>war</packaging>
 
     <name>HermesSimulator</name>
@@ -80,14 +80,40 @@
             <artifactId>bootstrap</artifactId>  
             <version>1.0.10</version>  
         </dependency>  
+        
+        <!-- JYFR: Para enviar emails -->
+        <dependency>
+            <groupId>javax.mail</groupId>
+            <artifactId>mail</artifactId>
+            <version>1.4.7</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.mail</groupId>
+            <artifactId>javax.mail-api</artifactId>
+            <version>1.5.5</version>
+        </dependency>
+        
         <!-- JYFR: Ztreamy (lo he mavenizado) -->
         <dependency>
             <groupId>ztreamy</groupId>
             <artifactId>ztreamyPublisher</artifactId>
-            <version>0.4.2.dev12</version>
+            <version>0.4.2.dev13</version>
             <type>jar</type>
         </dependency>
         
+        <!-- JYFR: Para la exportación a CSV de los resultados -->
+        <dependency>
+            <groupId>net.sf.supercsv</groupId>
+            <artifactId>super-csv</artifactId>
+            <version>2.4.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>gov.nih.imagej</groupId>
+            <artifactId>imagej</artifactId>
+            <version>1.47</version>
+        </dependency>
+
     </dependencies>
 
     <build>

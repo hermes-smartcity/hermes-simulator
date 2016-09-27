@@ -3,47 +3,59 @@ package es.jyago.hermes.simulator;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
+import es.jyago.hermes.csv.CSVEvent;
 import es.jyago.hermes.google.directions.Location;
 import es.jyago.hermes.location.detail.LocationLogDetail;
 import es.jyago.hermes.location.LocationLog;
 import es.jyago.hermes.openStreetMap.PositionSimulatedSpeed;
 import es.jyago.hermes.person.Person;
 import es.jyago.hermes.util.Constants;
+import es.jyago.hermes.util.Email;
 import es.jyago.hermes.util.HermesException;
-import es.jyago.hermes.util.MessageBundle;
 import es.jyago.hermes.util.Util;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Type;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.ResourceBundle;
 import java.util.Timer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Inject;
 import javax.inject.Named;
+import javax.mail.MessagingException;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.joda.time.LocalTime;
 import org.primefaces.context.RequestContext;
+import org.primefaces.event.SlideEndEvent;
 import org.primefaces.event.map.OverlaySelectEvent;
 import org.primefaces.model.map.DefaultMapModel;
 import org.primefaces.model.map.LatLng;
 import org.primefaces.model.map.MapModel;
 import org.primefaces.model.map.Marker;
 import org.primefaces.model.map.Polyline;
+import org.supercsv.cellprocessor.ift.CellProcessor;
+import org.supercsv.io.CsvBeanWriter;
+import org.supercsv.io.ICsvBeanWriter;
+import org.supercsv.prefs.CsvPreference;
 
 @Named("simulatorController")
 @ApplicationScoped
@@ -63,8 +75,14 @@ public class SimulatorController implements Serializable {
     // Máximo retardo para iniciar la ruta, en milisegundos:
     private static final int MAX_INITIAL_DELAY = 60000;
 
+    // Paquetes de peticiones en la generación de trayectos. Google ha limitado más el número de peticiones por segundo.
+    private static final int REQUEST_PACK_SIZE = 10;
+
+    // Número máximo de hilos en el simulador.
+    private static final int MAX_THREADS = 50000;
+
     // Número de tramas de Ztreamy generadas.
-    private static volatile int ztreamyObjectsCount = 0;
+    private static volatile int ztreamyObjects = 0;
     // Número de errores contabilizados al enviar las tramas a Ztreamy, distintos de los 'no OK'.
     private static volatile int ztreamyErrors = 0;
     // Número de tramas enviadas a Ztreamy correctamente.
@@ -75,6 +93,10 @@ public class SimulatorController implements Serializable {
     private static volatile int zTreamyRecovered = 0;
     // Número de tramas enviadas a Ztreamy que no se han podido reenviar porque ha terminado la simulación de cada trayecto.
     private static volatile int zTreamyFinallyPending = 0;
+    // Número de envíos que se han realizado, ya sean correctos o fallidos.
+    private static volatile int ztreamySends = 0;
+    // Número de tramas descartadas por alcanzar el máximo de reintentos.
+    private static volatile int ztreamyDiscarded = 0;
     // Número de hilos en ejecución
     private static volatile int runningThreads = 0;
 
@@ -86,20 +108,21 @@ public class SimulatorController implements Serializable {
     private static int distanceFromSevilleCenter = 1;
     // Número de trayectos a generar.
     private static int tracksAmount = 1;
-    // Indicará si se intenta reeenvíar los datos a Ztreamy.
-    static boolean retryOnFail = true;
+    // Indicará los segundos que habrá que esperar entre reintentos en caso de fallo.
+    static int secondsBetweenRetries = 10;
 
     private static MapModel simulatedMapModel;
     private static ArrayList<LocationLog> locationLogList;
 
     private static Map<String, Timer> simulationTimers = null;
     private static int simulatedSmartDrivers = 1;
-    private static long startSimulationTime = 0l;
-    private static long endSimulationTime = 0l;
+    static long startSimulationTime = 0l;
+    static long endSimulationTime = 0l;
 
-    @Inject
-    @MessageBundle
-    private ResourceBundle bundle;
+    private static String email = "jorgeyago.ingeniero@gmail.com";
+    private static boolean enableGUI = true;
+
+    private static volatile List<CSVEvent> csvEventList;
 
     public SimulatorController() {
     }
@@ -158,7 +181,7 @@ public class SimulatorController implements Serializable {
                             // TODO: (Muchas peticiones) Ver si es la mejor forma o si calculo yo las modificaciones de las velocidades. 
                             jsonTrack = IOUtils.toString(new URL("http://cronos.lbd.org.es/hermes/api/smartdriver/network/simulate?fromLat=" + o.getLat() + "&fromLng=" + o.getLng() + "&toLat=" + d.getLat() + "&toLng=" + d.getLng() + "&speedFactor=1.0"), "UTF-8");
                         } catch (IOException ex) {
-                            LOG.log(Level.SEVERE, "generateSimulatedTracks() - OPENSTREETMAP - Error I/O: {0}", ex.getMessage());
+                            LOG.log(Level.SEVERE, "generateSimulatedTracks() - Error I/O: {0}", ex.getMessage());
                             // Generamos nuevos puntos aleatorios hasta que sean aceptados.
                             o = getRandomLocation(SEVILLE.getLat(), SEVILLE.getLng(), distanceFromSevilleCenter);
                             d = getRandomLocation(origin.getLat(), origin.getLng(), distance);
@@ -173,9 +196,48 @@ public class SimulatorController implements Serializable {
             trackRequestTaskList.add(callable);
         }
 
+        // Tomamos la marca de tiempo actual. Nos servirá para espaciar las peticiones de trayectos a Google, ya que no se pueden hacer más de 10 peticiones por segundo con la cuenta gratuita.
+        // Aplicamos el mismo criterio para OpenStreetMap, aunque no sea necesario en principio.
+        long timeMark = System.currentTimeMillis();
         // Ejecutamos el listado de tareas, que se dividirá en los hilos y con las condiciones que haya configurados en 'TrackRequestWebService'.
+        for (int i = 0; i <= trackRequestTaskList.size(); i += REQUEST_PACK_SIZE) {
+            if (i > 0) {
+                long elapsedTime = System.currentTimeMillis() - timeMark;
+                if (elapsedTime < 1000) {
+                    try {
+                        // Antes de hacer la siguiente petición, esperamos 1 segundo, para cumplir las restricciones de Google.
+                        Thread.sleep(1000 - elapsedTime);
+                    } catch (InterruptedException ex) {
+                    } finally {
+                        timeMark = System.currentTimeMillis();
+                    }
+                }
+                requestTracks(trackRequestTaskList.subList(i - REQUEST_PACK_SIZE, i));
+            }
+        }
+        int remaining = trackRequestTaskList.size() % REQUEST_PACK_SIZE;
+        if (remaining != 0) {
+            try {
+                // Antes de hacer la siguiente petición, esperamos 1 segundo, para cumplir las restricciones de Google.
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {
+            }
+            requestTracks(trackRequestTaskList.subList(trackRequestTaskList.size() - remaining, trackRequestTaskList.size()));
+        }
+
+        // Paramos el 'listener'
+        TrackRequestWebService.shutdown();
+        LOG.log(Level.INFO, "generateSimulatedTracks() - Trayectos generados: {0}", locationLogList.size());
+        RequestContext context = RequestContext.getCurrentInstance();
+        if (context != null) {
+            context.update("gmap");
+            context.update("tracksAmountVar");
+        }
+    }
+
+    private void requestTracks(List<Callable<String>> trackRequestTaskSublist) {
         try {
-            List<Future<String>> futureTaskList = TrackRequestWebService.submitAllTask(trackRequestTaskList);
+            List<Future<String>> futureTaskList = TrackRequestWebService.submitAllTask(trackRequestTaskSublist);
             for (Future<String> future : futureTaskList) {
                 LocationLog ll = new LocationLog();
 
@@ -214,12 +276,7 @@ public class SimulatorController implements Serializable {
             }
         } catch (InterruptedException ex) {
             LOG.log(Level.SEVERE, "Error al obtener el JSON de la ruta", ex);
-        } finally {
-            // Paramos el mecanismo.
-            TrackRequestWebService.shutdown();
         }
-
-        LOG.log(Level.INFO, "generateSimulatedTracks() - Trayectos generados: {0}", locationLogList.size());
     }
 
     private Person createSimPerson(long currentTime) {
@@ -407,12 +464,18 @@ public class SimulatorController implements Serializable {
         tracksAmount = ta;
     }
 
-    public boolean isRetryOnFail() {
-        return retryOnFail;
+    public void onSlideEndTracksAmount(SlideEndEvent event) {
+        if (event.getValue() * simulatedSmartDrivers > MAX_THREADS) {
+            simulatedSmartDrivers = MAX_THREADS / event.getValue();
+        }
     }
 
-    public void setRetryOnFail(boolean rof) {
-        retryOnFail = rof;
+    public int getSecondsBetweenRetries() {
+        return secondsBetweenRetries;
+    }
+
+    public void setSecondsBetweenRetries(int sbr) {
+        secondsBetweenRetries = sbr;
     }
 
     public int getSimulatedSmartDrivers() {
@@ -421,6 +484,12 @@ public class SimulatorController implements Serializable {
 
     public void setSimulatedSmartDrivers(int ssd) {
         simulatedSmartDrivers = ssd;
+    }
+
+    public void onSlideEndSimulatedSmartDrivers(SlideEndEvent event) {
+        if (tracksAmount * event.getValue() > MAX_THREADS) {
+            tracksAmount = MAX_THREADS / event.getValue();
+        }
     }
 
     public static boolean isSimulating() {
@@ -457,10 +526,13 @@ public class SimulatorController implements Serializable {
     public static void realTimeSimulate() {
         // Si el temporizador está instanciado, es que hay una simulación en marcha y se quiere parar.
         if (isSimulating()) {
+            String simulationSummary;
             if (ztreamyErrors > 0 || zTreamyNoOkSends > 0) {
-                LOG.log(Level.SEVERE, "realTimeSimulate() - RESULTADO:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> NoOks={2}\n-> Otros errores={3}\n-> Recuperados={4}\n-> No enviados finalmente={5}\n-> Hilos restantes={6}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, zTreamyFinallyPending, runningThreads});
+                simulationSummary = MessageFormat.format("RESULTADO DE LA SIMULACION:\n\n-> Tramas generadas={0}\n-> Envíos realizados={1}\n-> Oks={2}\n-> NoOks={3}\n-> Otros errores={4}\n-> Recuperados={5}\n-> Descartados={6}\n-> No reenviados finalmente={7}\n-> Hilos restantes={8}\n-> Trayectos={9}\n-> Distancia={10}\n-> Instancias SmartDriver por trayecto={11}\n-> Segundos entre reintentos={12}\n\n", new Object[]{ztreamyObjects, ztreamySends, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, ztreamyDiscarded, zTreamyFinallyPending, runningThreads, locationLogList.size(), distance, simulatedSmartDrivers, secondsBetweenRetries});
+                LOG.log(Level.SEVERE, "realTimeSimulate() - {0}", simulationSummary);
             } else {
-                LOG.log(Level.INFO, "realTimeSimulate() - RESULTADO:\n\nLos envíos a Ztreamy se han realizado correctamente:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> Hilos restantes={2}\n\n", new Object[]{ztreamyObjectsCount, zTreamyOkSends, runningThreads});
+                simulationSummary = MessageFormat.format("RESULTADO DE LA SIMULACION:\n\nLos envíos a Ztreamy se han realizado correctamente:\n\n-> Tramas generadas={0}\n-> Oks={1}\n-> Hilos restantes={2}\n-> Trayectos={3}\n-> Distancia={4}\n-> Instancias SmartDriver por trayecto={5}\n-> Segundos entre reintentos={6}\n\n", new Object[]{ztreamyObjects, zTreamyOkSends, runningThreads, locationLogList.size(), distance, simulatedSmartDrivers, secondsBetweenRetries});
+                LOG.log(Level.INFO, "realTimeSimulate() - {0}", simulationSummary);
             }
 
             for (Timer timer : simulationTimers.values()) {
@@ -471,14 +543,27 @@ public class SimulatorController implements Serializable {
             }
 
             endSimulationTime = System.currentTimeMillis();
-            LOG.log(Level.INFO, "realTimeSimulate() - Inicio de la simulacion: {0} -> Fin de la simulación: {1} ({2})", new Object[]{Constants.dfISO8601.format(startSimulationTime), Constants.dfISO8601.format(endSimulationTime), DurationFormatUtils.formatDuration(endSimulationTime - startSimulationTime, "HH:mm:ss", true)});
+            String timeSummary = MessageFormat.format("Inicio de la simulacion: {0} -> Fin de la simulación: {1} ({2})", new Object[]{Constants.dfISO8601.format(startSimulationTime), Constants.dfISO8601.format(endSimulationTime), DurationFormatUtils.formatDuration(endSimulationTime - startSimulationTime, "HH:mm:ss", true)});
+            LOG.log(Level.INFO, "realTimeSimulate() - {0}", timeSummary);
+
+            try {
+                List<File> attachedFileList = new ArrayList<>();
+                if (csvEventList != null && !csvEventList.isEmpty()) {
+                    Path zipFilePath = generateZippedCSV();
+                    attachedFileList.add(zipFilePath.toFile());
+                }
+                // Se envía un e-mail para notificar que la simulación ha terminado.
+                Email.generateAndSendEmail(email, "FIN DE SIMULACION", "<html><head><title></title></head><body><p>" + simulationSummary.replaceAll("\n", "<br/>") + "</p><p>" + timeSummary + "</p><p>Un saludo.</p></body></html>", attachedFileList);
+            } catch (MessagingException ex) {
+                LOG.log(Level.SEVERE, "realTimeSimulate() - No se ha podido enviar el e-mail con los resultados de la simulación", ex);
+            }
             resetSimulation();
         } else {
             resetSimulation();
             simulationTimers = new HashMap<>();
             startSimulationTime = System.currentTimeMillis();
             LOG.log(Level.INFO, "realTimeSimulate() - Comienzo de la simulación: {0}", Constants.dfISO8601.format(startSimulationTime));
-            LOG.log(Level.INFO, "realTimeSimulate() - Condiciones:\n-> Actualización cada segundo (Tiempo real)\n-> ¿Reenviar tramas fallidas?: ", retryOnFail);
+            LOG.log(Level.INFO, "realTimeSimulate() - Condiciones:\n-> Actualización cada: {0} milisegundos. Ejecución en tiempo real\n-> Segundos entre reintentos={1}\n", new Object[]{secondsBetweenRetries});
             runningThreads = simulatedSmartDrivers * locationLogList.size();
             LOG.log(Level.INFO, "realTimeSimulate() - Se crean: {0} hilos de ejecución", runningThreads);
             try {
@@ -501,14 +586,9 @@ public class SimulatorController implements Serializable {
                     }
                 }
             } catch (MalformedURLException | HermesException ex) {
+                LOG.log(Level.SEVERE, "realTimeSimulate() - Ha ocurrido un problema al crear los hilos de ejecución. Se cancela la simulación", ex);
                 // Cancelamos las simulaciones.
-                for (Timer timer : simulationTimers.values()) {
-                    if (timer != null) {
-                        timer.cancel();
-                        timer = null;
-                    }
-                    resetSimulation();
-                }
+                realTimeSimulate();
             }
         }
     }
@@ -517,20 +597,26 @@ public class SimulatorController implements Serializable {
         RequestContext context = RequestContext.getCurrentInstance();
         if (context != null) {
             if (simulationTimers != null) {
-                context.execute("PF('gmapUpdaterVar').stop();");
-            } else {
+                if (enableGUI) {
+                    context.execute("PF('gmapUpdaterVar').stop();");
+                }
+                context.execute("PF('finishDialogVar').show();");
+            } else if (enableGUI) {
                 context.execute("PF('gmapUpdaterVar').start();");
             }
         }
 
         resetCarMarkers();
         simulationTimers = null;
-        ztreamyObjectsCount = 0;
+        ztreamyObjects = 0;
         zTreamyOkSends = 0;
         zTreamyNoOkSends = 0;
         zTreamyRecovered = 0;
         ztreamyErrors = 0;
         zTreamyFinallyPending = 0;
+        ztreamySends = 0;
+        ztreamyDiscarded = 0;
+        csvEventList = new ArrayList<>();
     }
 
     private static void resetCarMarkers() {
@@ -556,8 +642,8 @@ public class SimulatorController implements Serializable {
         return runningThreads == 0;
     }
 
-    public static synchronized void increaseZtreamyObjectsCount() {
-        ztreamyObjectsCount++;
+    public static synchronized void increaseZtreamyObjects() {
+        ztreamyObjects++;
     }
 
     public static synchronized void increaseZtreamyOkSends() {
@@ -568,8 +654,8 @@ public class SimulatorController implements Serializable {
         zTreamyNoOkSends++;
     }
 
-    public static synchronized void increaseZtreamyRecovered() {
-        zTreamyRecovered++;
+    public static synchronized void addZtreamyRecovered(int recovered) {
+        zTreamyRecovered += recovered;
     }
 
     public static synchronized void increaseZtreamyErrors() {
@@ -580,7 +666,116 @@ public class SimulatorController implements Serializable {
         zTreamyFinallyPending += pending;
     }
 
-    public static synchronized void logCurrentStatus() {
-        LOG.log(Level.SEVERE, "logCurrentStatus() - ESTADO ACTUAL: Tramas generadas={0}|Oks={1}|NoOks={2}|Otros errores={3}|Recuperados={4}|No enviados finalmente={5}|Hilos restantes={6}", new Object[]{ztreamyObjectsCount, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, zTreamyFinallyPending, runningThreads});
+    public static synchronized void increaseZtreamySends() {
+        ztreamySends++;
+    }
+
+    public static synchronized void increaseZtreamyDiscarded() {
+        ztreamyDiscarded++;
+    }
+
+    public static void logCurrentStatus() {
+        LOG.log(Level.SEVERE, "logCurrentStatus() - ESTADO ACTUAL: Tramas generadas={0}|Envíos realizados={1}|Oks={2}|NoOks={3}|Otros errores={4}|Recuperados={5}|Descartados={6}|No reenviados finalmente={7}|Hilos restantes={8}", new Object[]{ztreamyObjects, ztreamySends, zTreamyOkSends, zTreamyNoOkSends, ztreamyErrors, zTreamyRecovered, ztreamyDiscarded, zTreamyFinallyPending, runningThreads});
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String e) {
+        email = e;
+    }
+
+    public boolean isEnableGUI() {
+        return enableGUI;
+    }
+
+    public void setEnableGUI(boolean e) {
+        enableGUI = e;
+    }
+
+    public static synchronized void addCSVEvents(List<CSVEvent> list) {
+        csvEventList.addAll(list);
+    }
+
+    private static Path generateZippedCSV() {
+        try {
+            // Creamos un directorio temporal para contener los archivos generados.
+            Path tempDir = Files.createTempDirectory("Hermes_Simulator");
+            String tempDirPath = tempDir.toAbsolutePath().toString() + File.separator;
+            LOG.log(Level.INFO, "generateZippedCSV() - Directorio temporal para almacenar los CSV: {0}", tempDirPath);
+
+            // Creamos un archivo temporal para el CSV con los datos de los eventos.
+            String fileName = Constants.dfFile.format(System.currentTimeMillis());
+            String fileNameCSV = fileName + ".csv";
+            LOG.log(Level.INFO, "generateZippedCSV() - Generando archivo CSV: {0}", fileNameCSV);
+            File file = new File(tempDir.toUri().getPath(), fileNameCSV);
+            createDataFile(CsvPreference.EXCEL_NORTH_EUROPE_PREFERENCE, false, file);
+
+            // Creamos el archivo ZIP.
+            Path zipFile = Files.createTempFile(fileName + "_", ".zip");
+            try (ZipOutputStream zs = new ZipOutputStream(Files.newOutputStream(zipFile))) {
+                LOG.log(Level.INFO, "generateZippedCSV() - Generando ZIP: {0}", zipFile.getFileName().toString());
+
+                // Recorremos los archivos CSV del directorio temporal.
+                // Para almacenar los archivos en el ZIP, sin directorio.
+                String sp = file.getAbsolutePath().replace(tempDirPath, "");
+                ZipEntry zipEntry = new ZipEntry(sp);
+                try {
+                    zs.putNextEntry(zipEntry);
+                    zs.write(Files.readAllBytes(file.toPath()));
+                    zs.closeEntry();
+                } catch (Exception e) {
+                    LOG.log(Level.SEVERE, "generateZippedCSV() - No se ha podido comprimir el archivo: {0}", sp);
+                }
+            }
+            return zipFile;
+        } catch (IOException ex) {
+            LOG.log(Level.SEVERE, "generateZippedCSV() - No se ha podido generar el archivo con los datos de todos los eventos", ex);
+        }
+        return null;
+    }
+
+    private static void createDataFile(CsvPreference csvPreference, boolean ignoreHeaders, File file) {
+        ICsvBeanWriter beanWriter = null;
+
+        if (csvEventList != null && !csvEventList.isEmpty()) {
+            try {
+
+                beanWriter = new CsvBeanWriter(new FileWriter(file), csvPreference);
+
+                CSVEvent bean = csvEventList.get(0);
+                // Seleccionamos los atributos que vamos a exportar.
+                final String[] fields = bean.getFields();
+
+                // Aplicamos las características de los campos.
+                final CellProcessor[] processors = bean.getProcessors();
+
+                if (!ignoreHeaders) {
+                    // Ponemos la cabecera con los nombres de los atributos.
+                    if (bean.getHeaders() != null) {
+                        beanWriter.writeHeader(bean.getHeaders());
+                    } else {
+                        beanWriter.writeHeader(fields);
+                    }
+                }
+
+                // Procesamos los elementos.
+                for (final CSVEvent element : csvEventList) {
+                    beanWriter.write(element, fields, processors);
+                }
+            } catch (Exception ex) {
+                LOG.log(Level.SEVERE, "getFileData() - Error al exportar a CSV", ex);
+            } finally {
+                // Cerramos.
+                if (beanWriter != null) {
+                    try {
+                        beanWriter.close();
+                    } catch (IOException ex) {
+                        LOG.log(Level.SEVERE, "getFileData() - Error al cerrar el 'writer'", ex);
+                    }
+                }
+            }
+        }
     }
 }

@@ -20,6 +20,7 @@ public class Constants {
     public static final SimpleDateFormat dfTime = new SimpleDateFormat("HH:mm:ss");
     public static final SimpleDateFormat dfISO8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
     public static final DecimalFormat df2Decimals = new DecimalFormat("0.00");
+    public static final SimpleDateFormat dfFile = new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss");
 
     public static final String SIMULATOR_APPLICATION_ID = "SmartDriver";
 

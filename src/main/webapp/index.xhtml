@@ -42,32 +42,61 @@
     </h:head>
     <h:body>
         <h:form id="SimulatorMapForm">
-            <p:poll id="gmapUpdater" widgetVar="gmapUpdaterVar" interval="2" listener="#{simulatorController.getCurrentLatLng()}" oncomplete="handleComplete(xhr, status, args)" />
+            <h:panelGroup id="gmapUpdaterPanel">
+                <p:poll id="gmapUpdater" widgetVar="gmapUpdaterVar" interval="1" listener="#{simulatorController.getCurrentLatLng()}" oncomplete="handleComplete(xhr, status, args)" rendered="#{simulatorController.enableGUI}"/>
+            </h:panelGroup>
             <p:layout fullPage="true">
-                <p:layoutUnit position="west" resizable="false" size="300" header="#{bundle.TrackConditions}">
-                    <h:panelGrid columns="1" style="padding: 5px;">
-                        <h:outputText id="outputDistanceFromSevilleCenter" value="#{bundle.DistanceFromSevilleCenter} #{simulatorController.distanceFromSevilleCenter} Km" />
-                        <h:inputHidden id="distanceFromSevilleCenter" value="#{simulatorController.distanceFromSevilleCenter}"/>
-                        <p:slider for="distanceFromSevilleCenter" minValue="0" maxValue="100" display="outputDistanceFromSevilleCenter" displayTemplate="#{bundle.DistanceFromSevilleCenter} {value} Km"/>
+                <p:layoutUnit position="west" resizable="false" style="width: 360px;">
+                    <h:panelGroup id="configurationPanel">
+                        <p:fieldset legend="#{bundle.TrackConditions}" style="margin-bottom:20px" toggleable="false">
+                            <p:panelGrid columns="1" styleClass="myPanelGrid">
+                                <h:outputText id="outputDistanceFromSevilleCenter" value="#{bundle.DistanceFromSevilleCenter} #{simulatorController.distanceFromSevilleCenter} Km" style="font-weight:bold"/>
+                                <p:slider for="distanceFromSevilleCenter" minValue="0" maxValue="100" display="outputDistanceFromSevilleCenter" displayTemplate="#{bundle.DistanceFromSevilleCenter} {value} Km" disabled="#{simulatorController.isSimulating()}" class="mySlider"/>
+                                <h:inputHidden id="distanceFromSevilleCenter" value="#{simulatorController.distanceFromSevilleCenter}"/>
 
-                        <h:outputText id="outputTrackDistance" value="#{bundle.TrackDistance} #{simulatorController.distance} Km" />
-                        <h:inputHidden id="distance" value="#{simulatorController.distance}"/>
-                        <p:slider for="distance" minValue="1" maxValue="100" display="outputTrackDistance" displayTemplate="#{bundle.TrackDistance} {value} Km"/>
+                                <h:outputText id="outputTrackDistance" value="#{bundle.TrackDistance} #{simulatorController.distance} Km" style="font-weight:bold"/>
+                                <p:slider for="distance" minValue="1" maxValue="100" display="outputTrackDistance" displayTemplate="#{bundle.TrackDistance} {value} Km" disabled="#{simulatorController.isSimulating()}" class="mySlider"/>
+                                <h:inputHidden id="distance" value="#{simulatorController.distance}"/>
 
-                        <h:outputText id="outputTracksAmount" value="#{bundle.TracksAmount} #{simulatorController.tracksAmount}" />
-                        <h:inputHidden id="tracksAmount" value="#{simulatorController.tracksAmount}"/>
-                        <p:slider for="tracksAmount" minValue="1" maxValue="100" display="outputTracksAmount" displayTemplate="#{bundle.TracksAmount} {value}"/>
+                                <h:panelGroup id="tracksAmountPanel">
+                                    <h:outputText id="outputTracksAmount" value="#{bundle.TracksAmount} #{simulatorController.tracksAmount}" style="font-weight:bold"/>
+                                    <p:slider for="tracksAmount" widgetVar="tracksAmountVar" minValue="1" maxValue="30" display="outputTracksAmount" displayTemplate="#{bundle.TracksAmount} {value}" disabled="#{simulatorController.isSimulating()}" class="mySlider" style="margin-top: 5px;">
+                                        <p:ajax event="slideEnd" listener="#{simulatorController.onSlideEndTracksAmount}" update="simulatedSmartDriversPanel" />
+                                    </p:slider>
+                                    <h:inputHidden id="tracksAmount" value="#{simulatorController.tracksAmount}"/>
+                                </h:panelGroup>
 
-                        <p:commandButton id="generateButton" value="#{bundle.GenerateTracks}" action="#{simulatorController.generateSimulatedTracks()}" update="gmap" disabled="#{simulatorController.isSimulating()}"/>
-                        <p:separator />
+                                <p:commandButton id="generateButton" value="#{bundle.GenerateTracks}" action="#{simulatorController.generateSimulatedTracks()}" update="gmap" disabled="#{simulatorController.isSimulating()}" styleClass="ui-priority-primary" style="width: 50%; position: relative; left: 20%"/>
+                            </p:panelGrid>
+                        </p:fieldset>
+                        <p:fieldset id="simulatedSmartDriversPanel" legend="SmartDrivers" style="margin-bottom:20px" toggleable="false">
+                            <p:panelGrid columns="1" styleClass="myPanelGrid">
+                                <h:outputText id="outputSimulatedSmartDrivers" value="#{bundle.SimulatedSmartDriversPerTrack} #{simulatorController.simulatedSmartDrivers}" style="font-weight:bold"/>
+                                <p:slider for="simulatedSmartDrivers" minValue="1" maxValue="50000" display="outputSimulatedSmartDrivers" displayTemplate="#{bundle.SimulatedSmartDriversPerTrack} {value}" disabled="#{simulatorController.isSimulating()}" class="mySlider">
+                                    <p:ajax event="slideEnd" listener="#{simulatorController.onSlideEndSimulatedSmartDrivers}" update="tracksAmountPanel" />
+                                </p:slider>
+                                <h:inputHidden id="simulatedSmartDrivers" value="#{simulatorController.simulatedSmartDrivers}"/>
+                            </p:panelGrid>
+                        </p:fieldset>
+                        <p:fieldset legend="#{bundle.Options}" style="margin-bottom:20px" toggleable="false">
+                            <p:panelGrid columns="1" styleClass="myPanelGrid">
+                                <p:selectBooleanCheckbox value="#{simulatorController.enableGUI}" itemLabel="#{bundle.EnableGUI}" style="font-weight:bold">
+                                    <p:ajax update="gmapUpdaterPanel" />
+                                </p:selectBooleanCheckbox>
+                                <p:outputLabel value="#{bundle.Email}" for="email" style="font-weight:bold"/>
+                                <p:inputText id="email" value="#{simulatorController.email}" title="#{bundle.Email}"
+                                             validatorMessage="#{bundle.InvalidEmail}" style="width: 200px;" disabled="#{simulatorController.isSimulating()}">
+                                    <!-- JYFR: Validación de e-mail que permite nulo, ya que es un campo opcional. Se ha encapsulado la expresión regular en '( )?' -->
+                                    <f:validateRegex pattern="(^[_A-Za-z0-9-\+]+(\.[_A-Za-z0-9-]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9]+)*(\.[A-Za-z]{2,})$)?" /> 
+                                </p:inputText>
+                                <h:outputText id="outputTimeBetweenRetries" value="#{bundle.TimeBetweenRetries} #{simulatorController.secondsBetweenRetries} s" style="font-weight:bold"/>
+                                <p:slider id="sliderTimeBetweenRetries" for="timeBetweenRetries" minValue="1" maxValue="60" display="outputTimeBetweenRetries" displayTemplate="#{bundle.TimeBetweenRetries} {value}" disabled="#{simulatorController.isSimulating()}" class="mySlider"/>
+                                <h:inputHidden id="timeBetweenRetries" value="#{simulatorController.secondsBetweenRetries}"/>
+                            </p:panelGrid>
+                        </p:fieldset>
 
-                        <h:outputText id="outputSimulatedSmartDrivers" value="#{bundle.SimulatedSmartDriversPerTrack} #{simulatorController.simulatedSmartDrivers}" />
-                        <h:inputHidden id="simulatedSmartDrivers" value="#{simulatorController.simulatedSmartDrivers}"/>
-                        <p:slider for="simulatedSmartDrivers" minValue="1" maxValue="10000" display="outputSimulatedSmartDrivers" displayTemplate="#{bundle.SimulatedSmartDriversPerTrack} {value}"/>
-
-						<p:selectBooleanCheckbox value="#{simulatorController.retryOnFail}" itemLabel="#{bundle.RetryOnFail}" style="padding-top: 2px" />
-                        <p:commandButton widgetVar="simulateButtonVar" id="simulateButton" value="#{simulatorController.isSimulating() ? bundle.StopSimulation : bundle.StartSimulation}" action="#{simulatorController.realTimeSimulate()}" update="gmapUpdater, gmap, generateButton, simulateButton" style="padding-top: 5px;"/>
-                    </h:panelGrid>
+                        <p:commandButton widgetVar="simulateButtonVar" id="simulateButton" value="#{simulatorController.isSimulating() ? bundle.StopSimulation : bundle.StartSimulation}" action="#{simulatorController.realTimeSimulate()}" update="gmapUpdaterPanel, configurationPanel, gmap" styleClass="ui-priority-primary"  style="width: 50%; position: relative; left: 20%"/>
+                    </h:panelGroup>
                 </p:layoutUnit>
 
                 <p:layoutUnit position="center">

@@ -47,12 +47,14 @@
     </error-page>
     
     <!-- JYFR: Filtro para no 'cachear' las páginas -->
+    <!--
     <filter>
         <filter-name>NoCacheFilter</filter-name>
-        <filter-class>es.jyago.hermes.util.NoCacheFilter</filter-class>
+        <filter-class>es.us.lsi.hermes.util.NoCacheFilter</filter-class>
     </filter>
     <filter-mapping>
         <filter-name>NoCacheFilter</filter-name>
         <url-pattern>/faces/*</url-pattern>
     </filter-mapping>
+    -->
 </web-app>
